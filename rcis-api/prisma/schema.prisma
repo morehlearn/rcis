@@ -1,0 +1,143 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum AccountType {
+  LOCAL_CONTRACTOR
+  FOREIGN_CONTRACTOR
+  SKILLED_WORKER
+  SITE_SUPERVISOR
+}
+
+model UserExternal {
+  id             String      @id @default(uuid())
+  nationalId     String      @unique   // National ID / Passport No.
+  fullName       String
+  accountType    AccountType
+  companyName    String?               // required only for contractor account types
+  mobileNumber   String
+  email          String      @unique
+  password       String                // bcrypt hash, never stored plain
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  applications ContractorCompany[]
+}
+
+
+enum ApplicationStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  NEEDS_REVISION
+  APPROVED
+  REJECTED
+}
+
+// Tracks the next sequence number per year, so regno generation is
+// race-safe under concurrent requests (increment happens inside a
+// transaction, not by scanning existing rows for the current max).
+model RegnoCounter {
+  year  Int @id
+  count Int @default(0)
+}
+
+model ContractorCompany {
+  regno     String   @id
+  userId    String
+  user      UserExternal @relation(fields: [userId], references: [id])
+  directors ContractorDirector[]
+  offices   ContractorOffice[]
+  documents ContractorDocument[]
+  
+  // Step 1: Firm Profile
+  incorporationNo String
+  firmName        String?
+  headOffice      String
+  postalAddress   String?
+  county          String?
+  town            String
+  localForeign    String
+  website         String?
+  telephone       String
+  cellPhone       String
+  email           String?
+  latitude        String?
+  longitude       String?
+
+  // Step 2: Firm Registration
+  firmType                String?
+  kraPin                  String?
+  registeredCapital       String?
+  paidUpCapital           String?
+  taxComplianceNo         String?
+  bankName                String?
+  bankBranch              String?
+  agencyName              String?
+  agencyRegistrationNo    String?
+  agencyYear              String?
+  associationName         String?
+  associationNameOther    String?
+  associationMembershipNo String?
+  jointVentureProjects    String?
+  jointVentureFirms       String?
+  hasAgpoCertificate      String?
+  agpoCategories          String[]
+  agpoExpiryDate          String?
+
+  // Step 3: Declarations
+  acceptCodeOfConduct Boolean @default(false)
+  acceptTerms         Boolean @default(false)
+
+  status    ApplicationStatus @default(DRAFT)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+
+model ContractorDirector {
+  id                   String   @id @default(uuid())
+  regno                String
+  company              ContractorCompany @relation(fields: [regno], references: [regno])
+  idNo                 String
+  fullNames            String
+  nationality          String
+  highestQualification String
+  profession           String
+  yearsOfExperience    String
+  percentageShare      String
+  cvFileName           String?
+  cvFileKey            String?
+  academicCertFileName String?
+  academicCertFileKey  String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model ContractorOffice {
+  id        String   @id @default(uuid())
+  regno     String
+  company   ContractorCompany @relation(fields: [regno], references: [regno])
+  town      String
+  address   String
+  location  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ContractorDocument {
+  id         String   @id @default(uuid())
+  regno      String
+  company    ContractorCompany @relation(fields: [regno], references: [regno])
+  docType    String
+  fileName   String
+  fileKey    String
+  uploadedAt DateTime @default(now())
+}

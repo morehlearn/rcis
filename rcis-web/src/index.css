@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+:root {
+  --rcis-primary: #33b5e5;      /* header/sidebar blue */
+  --rcis-primary-dark: #2593bd; /* hover/pressed state */
+  --rcis-accent: #f39c12;       /* orange accent — headings, underline, upgrade icon */
+  --rcis-sand: #f6f5f1;         /* page background */
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--rcis-sand);
+}
