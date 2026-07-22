@@ -226,3 +226,20 @@ export const DOCUMENT_TYPES = [
   'Ownership Documents',
   'Other',
 ];
+
+// --- Step 6: Referees ---
+
+export interface Referee {
+  id: string;
+  name: string;
+  postalAddress: string;
+  telephone: string;
+  profession: string;
+}
+
+export const emptyRefereeDraft: Omit<Referee, 'id'> = {
+  name: '',
+  postalAddress: '',
+  telephone: '',
+  profession: '',
+};

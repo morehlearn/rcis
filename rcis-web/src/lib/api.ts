@@ -56,6 +56,7 @@ export interface ContractorCompany extends FirmProfilePayload {
   status: string;
   createdAt: string;
   updatedAt: string;
+  // Firm registration fields - only populated once Step 2 has been saved.
   firmType?: string | null;
   kraPin?: string | null;
   registeredCapital?: string | null;
@@ -74,6 +75,7 @@ export interface ContractorCompany extends FirmProfilePayload {
   hasAgpoCertificate?: string | null;
   agpoCategories?: string[];
   agpoExpiryDate?: string | null;
+  // Declarations - only meaningfully true once Step 3 has been saved.
   acceptCodeOfConduct?: boolean;
   acceptTerms?: boolean;
 }
@@ -188,6 +190,17 @@ export function createFirmProfile(payload: FirmProfilePayload) {
   }, true);
 }
 
+export interface UpdateFirmProfilePayload extends Partial<FirmProfilePayload> {
+  regno: string;
+}
+
+export function updateFirmProfile(payload: UpdateFirmProfilePayload) {
+  return request<ContractorCompany>('/contractor-applications/profile', {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  }, true);
+}
+
 export function updateFirmRegistration(payload: FirmRegistrationPayload) {
   return request<ContractorCompany>('/contractor-applications/registration', {
     method: 'PATCH',
@@ -246,6 +259,9 @@ function directorFileUrlPath(directorId: string, field: DirectorFileField) {
   return `/contractor-applications/directors/${directorId}/${segment}`;
 }
 
+// File uploads use FormData, which needs its own multipart boundary header
+// set automatically by the browser - so this bypasses the JSON-only
+// `request` helper rather than fighting it.
 export async function uploadDirectorFile(
   directorId: string,
   field: DirectorFileField,
@@ -335,6 +351,8 @@ export function listDocuments(regno: string) {
   }, true);
 }
 
+// Same FormData reasoning as uploadDirectorFile - bypasses the JSON-only
+// `request` helper.
 export async function uploadDocument(regno: string, docType: string, file: File): Promise<ContractorDocumentRecord> {
   const formData = new FormData();
   formData.append('regno', regno);
@@ -366,15 +384,51 @@ export function deleteDocument(documentId: string) {
   return request<{ success: boolean }>(`/contractor-applications/documents/${documentId}`, {
     method: 'DELETE',
   }, true);
-  
-}
-export interface UpdateFirmProfilePayload extends Partial<FirmProfilePayload> {
-  regno: string;
 }
 
-export function updateFirmProfile(payload: UpdateFirmProfilePayload) {
-  return request<ContractorCompany>('/contractor-applications/profile', {
+export interface ContractorRefereeRecord {
+  id: string;
+  regno: string;
+  name: string;
+  postalAddress: string;
+  telephone: string;
+  profession: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateRefereePayload {
+  regno: string;
+  name: string;
+  postalAddress: string;
+  telephone: string;
+  profession: string;
+}
+
+export type UpdateRefereePayload = Partial<Omit<CreateRefereePayload, 'regno'>>;
+
+export function listReferees(regno: string) {
+  return request<ContractorRefereeRecord[]>(`/contractor-applications/referees?regno=${encodeURIComponent(regno)}`, {
+    method: 'GET',
+  }, true);
+}
+
+export function createReferee(payload: CreateRefereePayload) {
+  return request<ContractorRefereeRecord>('/contractor-applications/referees', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, true);
+}
+
+export function updateReferee(id: string, payload: UpdateRefereePayload) {
+  return request<ContractorRefereeRecord>(`/contractor-applications/referees/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
+  }, true);
+}
+
+export function deleteReferee(id: string) {
+  return request<{ success: boolean }>(`/contractor-applications/referees/${id}`, {
+    method: 'DELETE',
   }, true);
 }

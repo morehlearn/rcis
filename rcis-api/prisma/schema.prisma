@@ -56,6 +56,7 @@ model ContractorCompany {
   directors ContractorDirector[]
   offices   ContractorOffice[]
   documents ContractorDocument[]
+  referees ContractorReferee[]
   
   // Step 1: Firm Profile
   incorporationNo String
@@ -140,4 +141,15 @@ model ContractorDocument {
   fileName   String
   fileKey    String
   uploadedAt DateTime @default(now())
+}
+model ContractorReferee {
+  id            String   @id @default(uuid())
+  regno         String
+  company       ContractorCompany @relation(fields: [regno], references: [regno])
+  name          String
+  postalAddress String
+  telephone     String
+  profession    String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }

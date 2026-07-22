@@ -22,6 +22,8 @@ import { UpdateDirectorDto } from './dto/update-director.dto';
 import { CreateOfficeDto } from './dto/create-office.dto';
 import { UpdateOfficeDto,  } from './dto/update-office.dto';
 import { UpdateFirmProfileDto,  } from './dto/update-firm-profile.dto';
+import { CreateRefereeDto } from './dto/create-referee.dto';
+import { UpdateRefereeDto } from './dto/update-referee.dto';
 UpdateFirmProfileDto 
 @UseGuards(JwtAuthGuard)
 @Controller('contractor-applications')
@@ -145,6 +147,26 @@ deleteDocument(@CurrentUser() user: { userId: string }, @Param('id') id: string)
 @Patch('profile')
 updateFirmProfile(@CurrentUser() user: { userId: string }, @Body() dto: UpdateFirmProfileDto) {
   return this.service.updateFirmProfile(user.userId, dto);
+}
+
+@Get('referees')
+listReferees(@CurrentUser() user: { userId: string }, @Query('regno') regno: string) {
+  return this.service.listReferees(user.userId, regno);
+}
+
+@Post('referees')
+createReferee(@CurrentUser() user: { userId: string }, @Body() dto: CreateRefereeDto) {
+  return this.service.createReferee(user.userId, dto);
+}
+
+@Patch('referees/:id')
+updateReferee(@CurrentUser() user: { userId: string }, @Param('id') id: string, @Body() dto: UpdateRefereeDto) {
+  return this.service.updateReferee(user.userId, id, dto);
+}
+
+@Delete('referees/:id')
+deleteReferee(@CurrentUser() user: { userId: string }, @Param('id') id: string) {
+  return this.service.deleteReferee(user.userId, id);
 }
 
 }

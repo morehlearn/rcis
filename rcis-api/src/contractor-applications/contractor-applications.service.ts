@@ -9,6 +9,8 @@ import { MinioService } from '../files/minio.service';
 import { CreateOfficeDto } from './dto/create-office.dto';
 import { UpdateOfficeDto } from './dto/update-office.dto';
 import { UpdateFirmProfileDto } from './dto/update-firm-profile.dto';
+import { CreateRefereeDto } from './dto/create-referee.dto';
+import { UpdateRefereeDto } from './dto/update-referee.dto';
 
 @Injectable()
 export class ContractorApplicationsService {
@@ -213,4 +215,41 @@ export class ContractorApplicationsService {
     data: rest,
   });
 }
+
+async listReferees(userId: string, regno: string) {
+  await this.getOwned(regno, userId);
+  return this.prisma.client.contractorReferee.findMany({
+    where: { regno },
+    orderBy: { createdAt: 'asc' },
+  });
+}
+
+async createReferee(userId: string, dto: CreateRefereeDto) {
+  const { regno, ...rest } = dto;
+  await this.getOwned(regno, userId);
+  return this.prisma.client.contractorReferee.create({ data: { regno, ...rest } });
+}
+
+private async getOwnedReferee(refereeId: string, userId: string) {
+  const referee = await this.prisma.client.contractorReferee.findUnique({
+    where: { id: refereeId },
+    include: { company: true },
+  });
+  if (!referee) throw new NotFoundException('Referee not found');
+  if (referee.company.userId !== userId) throw new ForbiddenException('This referee does not belong to you');
+  return referee;
+}
+
+async updateReferee(userId: string, refereeId: string, dto: UpdateRefereeDto) {
+  await this.getOwnedReferee(refereeId, userId);
+  return this.prisma.client.contractorReferee.update({ where: { id: refereeId }, data: dto });
+}
+
+async deleteReferee(userId: string, refereeId: string) {
+  await this.getOwnedReferee(refereeId, userId);
+  await this.prisma.client.contractorReferee.delete({ where: { id: refereeId } });
+  return { success: true };
+}
+
+
 }

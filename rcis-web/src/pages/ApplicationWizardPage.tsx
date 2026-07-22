@@ -9,11 +9,12 @@ import FirmRegistrationStep from '@/features/wizard/steps/FirmRegistrationStep';
 import DeclarationsStep from '@/features/wizard/steps/DeclarationsStep';
 import DirectorsStep from '@/features/wizard/steps/DirectorsStep';
 import OfficesStep from '@/features/wizard/steps/OfficesStep';
+import RefereesStep from '@/features/wizard/steps/RefereesStep';
 import ApplicationRequirementsModal from '@/features/wizard/ApplicationRequirementsModal';
 import { WIZARD_STEPS, MODE_LABELS, resolveMode } from '@/features/wizard/wizard-config';
 import {
   emptyFirmProfile, emptyFirmRegistration, emptyDeclarations,
-  type FirmProfileData, type FirmRegistrationData, type DeclarationsData, type Director, type Office,
+  type FirmProfileData, type FirmRegistrationData, type DeclarationsData, type Director, type Office, type Referee,
 } from '@/features/wizard/wizard-types';
 import {
   createFirmProfile, updateFirmProfile, updateFirmRegistration, updateDeclarations, listMyApplications,
@@ -21,6 +22,7 @@ import {
   uploadDirectorFile, getDirectorFileUrl, type ContractorDirectorRecord, type DirectorFileField,
   listOffices, createOffice, updateOffice, deleteOffice, type ContractorOfficeRecord,
   listDocuments, uploadDocument, getDocumentUrl, deleteDocument, type ContractorDocumentRecord,
+  listReferees, createReferee, updateReferee, deleteReferee, type ContractorRefereeRecord,
 } from '@/lib/api';
 
 type FirmProfileErrors = Partial<Record<keyof FirmProfileData, string>>;
@@ -74,6 +76,12 @@ export default function ApplicationWizardPage() {
   const [documentsUploading, setDocumentsUploading] = useState(false);
   const [documentsLoadedFor, setDocumentsLoadedFor] = useState<string | null>(null);
 
+  const [referees, setReferees] = useState<Referee[]>([]);
+  const [refereesError, setRefereesError] = useState('');
+  const [refereesLoading, setRefereesLoading] = useState(false);
+  const [refereesSaving, setRefereesSaving] = useState(false);
+  const [refereesLoadedFor, setRefereesLoadedFor] = useState<string | null>(null);
+
   // regno is assigned by the backend the moment Step 1 saves successfully.
   // Every subsequent step's PATCH call needs it, so it lives at wizard level.
   const [regno, setRegno] = useState<string | null>(null);
@@ -94,7 +102,7 @@ export default function ApplicationWizardPage() {
 
     setResuming(true);
     listMyApplications()
-      .then((applications) => {
+      .then(async (applications) => {
         const app = applications.find((a) => a.regno === resumeRegno);
         if (!app) {
           setApiError('That application could not be found.');
@@ -148,7 +156,18 @@ export default function ApplicationWizardPage() {
         // is Step 2 (Firm Registration).
         const declarationsDone = !!app.acceptCodeOfConduct && !!app.acceptTerms;
         const registrationDone = !!app.firmType;
-        const resumeStep = declarationsDone ? 3 : registrationDone ? 2 : 1;
+        let resumeStep = declarationsDone ? 3 : registrationDone ? 2 : 1;
+
+        if (declarationsDone) {
+          const [directorRecords, officeRecords, refereeRecords] = await Promise.all([
+            listDirectors(app.regno).catch(() => []),
+            listOffices(app.regno).catch(() => []),
+            listReferees(app.regno).catch(() => []),
+          ]);
+          if (refereeRecords.length > 0) resumeStep = 5;
+          else if (officeRecords.length > 0) resumeStep = 4;
+          else if (directorRecords.length > 0) resumeStep = 3;
+        }
 
         setVisited(new Set(Array.from({ length: resumeStep + 1 }, (_, i) => i)));
         setActiveStep(resumeStep);
@@ -202,9 +221,9 @@ export default function ApplicationWizardPage() {
   // Same idea as Directors: load offices and the shared document pool the
   // first time Step 5 is reached for a given regno.
   useEffect(() => {
-    if (activeStep !== 4 || !regno) return;
+    if ((activeStep !== 4 && activeStep !== 5) || !regno) return;
 
-    if (officesLoadedFor !== regno) {
+    if (activeStep === 4 && officesLoadedFor !== regno) {
       setOfficesLoading(true);
       listOffices(regno)
         .then((records) => {
@@ -229,6 +248,31 @@ export default function ApplicationWizardPage() {
         })
         .finally(() => setDocumentsLoading(false));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStep, regno]);
+
+  const toReferee = (record: ContractorRefereeRecord): Referee => ({
+    id: record.id,
+    name: record.name,
+    postalAddress: record.postalAddress,
+    telephone: record.telephone,
+    profession: record.profession,
+  });
+
+  // Load existing referees the first time Step 6 is reached for a given regno.
+  useEffect(() => {
+    if (activeStep !== 5 || !regno || refereesLoadedFor === regno) return;
+
+    setRefereesLoading(true);
+    listReferees(regno)
+      .then((records) => {
+        setReferees(records.map(toReferee));
+        setRefereesLoadedFor(regno);
+      })
+      .catch((err) => {
+        setRefereesError(err instanceof Error ? err.message : 'Could not load referees.');
+      })
+      .finally(() => setRefereesLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeStep, regno]);
 
@@ -359,6 +403,52 @@ export default function ApplicationWizardPage() {
       return true;
     } catch (err) {
       setOfficesError(err instanceof Error ? err.message : 'Could not delete this office. Please try again.');
+      return false;
+    }
+  };
+
+  const handleAddReferee = async (referee: Omit<Referee, 'id'>): Promise<boolean> => {
+    if (!regno) {
+      setRefereesError('Missing application reference — please go back to Step 1 and save again.');
+      return false;
+    }
+    setRefereesSaving(true);
+    setRefereesError('');
+    try {
+      const created = await createReferee({ regno, ...referee });
+      setReferees((prev) => [...prev, toReferee(created)]);
+      return true;
+    } catch (err) {
+      setRefereesError(err instanceof Error ? err.message : 'Could not save this referee. Please try again.');
+      return false;
+    } finally {
+      setRefereesSaving(false);
+    }
+  };
+
+  const handleUpdateReferee = async (id: string, referee: Omit<Referee, 'id'>): Promise<boolean> => {
+    setRefereesSaving(true);
+    setRefereesError('');
+    try {
+      const updated = await updateReferee(id, referee);
+      setReferees((prev) => prev.map((r) => (r.id === id ? toReferee(updated) : r)));
+      return true;
+    } catch (err) {
+      setRefereesError(err instanceof Error ? err.message : 'Could not update this referee. Please try again.');
+      return false;
+    } finally {
+      setRefereesSaving(false);
+    }
+  };
+
+  const handleDeleteReferee = async (id: string): Promise<boolean> => {
+    setRefereesError('');
+    try {
+      await deleteReferee(id);
+      setReferees((prev) => prev.filter((r) => r.id !== id));
+      return true;
+    } catch (err) {
+      setRefereesError(err instanceof Error ? err.message : 'Could not delete this referee. Please try again.');
       return false;
     }
   };
@@ -585,6 +675,28 @@ export default function ApplicationWizardPage() {
         />
       );
     }
+
+    if (activeStep === 5) {
+      return (
+        <RefereesStep
+          referees={referees}
+          onAdd={handleAddReferee}
+          onUpdate={handleUpdateReferee}
+          onDelete={handleDeleteReferee}
+          error={refereesError}
+          saving={refereesSaving}
+          loading={refereesLoading}
+          documents={documents}
+          documentsLoading={documentsLoading}
+          documentsUploading={documentsUploading}
+          documentsError={documentsError}
+          onUploadDocument={handleUploadDocument}
+          onViewDocument={handleViewDocument}
+          onDeleteDocument={handleDeleteDocument}
+        />
+      );
+    }
+
     return (
       <div className="flex flex-col items-center justify-center text-center py-16 text-slate-400">
         <p className="text-sm font-medium text-slate-500">{WIZARD_STEPS[activeStep]}</p>
