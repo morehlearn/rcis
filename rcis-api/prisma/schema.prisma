@@ -57,6 +57,13 @@ model ContractorCompany {
   offices   ContractorOffice[]
   documents ContractorDocument[]
   referees ContractorReferee[]
+  assets ContractorAsset[]
+  staff ContractorStaff[]
+  equipment ContractorEquipment[]
+  projectExperience ContractorProjectExperience[]
+  litigationHistory ContractorLitigation[]
+  classification ContractorClassification?
+  applications ContractorApplication[]
   
   // Step 1: Firm Profile
   incorporationNo String
@@ -152,4 +159,93 @@ model ContractorReferee {
   profession    String
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+model ContractorAsset {
+  id             String   @id @default(uuid())
+  regno          String
+  company        ContractorCompany @relation(fields: [regno], references: [regno])
+  description    String
+  registrationNo String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model ContractorStaff {
+  id                   String   @id @default(uuid())
+  regno                String
+  company              ContractorCompany @relation(fields: [regno], references: [regno])
+  fullNames            String
+  idNo                 String
+  nationality          String
+  highestQualification String
+  yearsOfExperience    String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+
+model ContractorEquipment {
+  id             String   @id @default(uuid())
+  regno          String
+  company        ContractorCompany @relation(fields: [regno], references: [regno])
+  name           String
+  ownedOrLeased  String
+  typeMakeModel  String
+  category       String
+  registrationNo String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model ContractorProjectExperience {
+  id                String   @id @default(uuid())
+  regno             String
+  company           ContractorCompany @relation(fields: [regno], references: [regno])
+  project           String
+  ncaProjectRegNo   String
+  contractSum       String
+  contractPeriod    String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model ContractorLitigation {
+  id                  String   @id @default(uuid())
+  regno               String
+  company             ContractorCompany @relation(fields: [regno], references: [regno])
+  refNo               String
+  date                String
+  partiesInvolved     String
+  particularOfLitigation String
+  statusOfMatter      String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+model ContractorClassification {
+  regno                String   @id
+  company              ContractorCompany @relation(fields: [regno], references: [regno])
+  applicationType      String
+  buildingWorksCategory String
+  roadWorksCategory    String
+  waterWorksCategory   String
+  electricalSubClasses String[]
+  electricalCategory   String
+  mechanicalSubClasses String[]
+  mechanicalCategory   String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model ContractorApplication {
+  id              String   @id @default(uuid())
+  regno           String
+  company         ContractorCompany @relation(fields: [regno], references: [regno])
+  trackNo         String
+  companyName     String?
+  classesApplied  String
+  applicationType String
+  localForeign    String
+  status          String   @default("SUBMITTED")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }

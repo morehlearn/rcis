@@ -9,15 +9,54 @@ import { MinioService } from '../files/minio.service';
 import { CreateOfficeDto } from './dto/create-office.dto';
 import { UpdateOfficeDto } from './dto/update-office.dto';
 import { UpdateFirmProfileDto } from './dto/update-firm-profile.dto';
+import { CreateAssetDto } from './dto/create-asset.dto';
+import { UpdateAssetDto } from './dto/update-asset.dto';
 import { CreateRefereeDto } from './dto/create-referee.dto';
 import { UpdateRefereeDto } from './dto/update-referee.dto';
+import { CreateStaffDto } from './dto/create-staff.dto';
+import { UpdateStaffDto } from './dto/update-staff.dto';
+import { CreateEquipmentDto } from './dto/create-equipment.dto';
+import { UpdateEquipmentDto } from './dto/update-equipment.dto';
+import { CreateProjectExperienceDto } from './dto/create-project-experience.dto';
+import { UpdateProjectExperienceDto } from './dto/update-project-experience.dto';
+import { CreateLitigationDto } from './dto/create-litigation.dto';
+import { UpdateLitigationDto } from './dto/update-litigation.dto';
+import { UpsertClassificationDto } from './dto/upsert-classification.dto';
+import { BrsService } from '../brs/brs.service';
+
 
 @Injectable()
 export class ContractorApplicationsService {
   constructor(
-    private prisma: PrismaService,
-    private minio: MinioService,
-  ) {}
+  private prisma: PrismaService,
+  private minio: MinioService,
+  private brs: BrsService,
+) {}
+
+ async verifyCompanyRegistration(userId: string, registrationNumber: string) {
+  const brsResult = await this.brs.verifyCompany(registrationNumber);
+  if (!brsResult) {
+    return { found: false as const };
+  }
+
+  const existing = await this.prisma.client.contractorCompany.findFirst({
+    where: { incorporationNo: registrationNumber },
+  });
+
+  if (existing && existing.userId !== userId) {
+    return { found: true as const, blocked: true as const };
+  }
+
+  const requiresForeignRegistration = brsResult.foreignShareholdingPercent >= 51;
+
+  return {
+    found: true as const,
+    blocked: false as const,
+    requiresForeignRegistration,
+    ...brsResult,
+    existingRegno: existing?.regno ?? null,
+  };
+}
 
   private async generateRegno(): Promise<string> {
     const year = new Date().getFullYear();
@@ -252,4 +291,243 @@ async deleteReferee(userId: string, refereeId: string) {
 }
 
 
+async listAssets(userId: string, regno: string) {
+  await this.getOwned(regno, userId);
+  return this.prisma.client.contractorAsset.findMany({
+    where: { regno },
+    orderBy: { createdAt: 'asc' },
+  });
+}
+
+async createAsset(userId: string, dto: CreateAssetDto) {
+  const { regno, ...rest } = dto;
+  await this.getOwned(regno, userId);
+  return this.prisma.client.contractorAsset.create({ data: { regno, ...rest } });
+}
+
+private async getOwnedAsset(assetId: string, userId: string) {
+  const asset = await this.prisma.client.contractorAsset.findUnique({
+    where: { id: assetId },
+    include: { company: true },
+  });
+  if (!asset) throw new NotFoundException('Asset not found');
+  if (asset.company.userId !== userId) throw new ForbiddenException('This asset does not belong to you');
+  return asset;
+}
+
+async updateAsset(userId: string, assetId: string, dto: UpdateAssetDto) {
+  await this.getOwnedAsset(assetId, userId);
+  return this.prisma.client.contractorAsset.update({ where: { id: assetId }, data: dto });
+}
+
+async deleteAsset(userId: string, assetId: string) {
+  await this.getOwnedAsset(assetId, userId);
+  await this.prisma.client.contractorAsset.delete({ where: { id: assetId } });
+  return { success: true };
+}
+
+async listStaff(userId: string, regno: string) {
+  await this.getOwned(regno, userId);
+  return this.prisma.client.contractorStaff.findMany({
+    where: { regno },
+    orderBy: { createdAt: 'asc' },
+  });
+}
+
+async createStaff(userId: string, dto: CreateStaffDto) {
+  const { regno, ...rest } = dto;
+  await this.getOwned(regno, userId);
+  return this.prisma.client.contractorStaff.create({ data: { regno, ...rest } });
+}
+
+private async getOwnedStaff(staffId: string, userId: string) {
+  const staff = await this.prisma.client.contractorStaff.findUnique({
+    where: { id: staffId },
+    include: { company: true },
+  });
+  if (!staff) throw new NotFoundException('Staff member not found');
+  if (staff.company.userId !== userId) throw new ForbiddenException('This staff member does not belong to you');
+  return staff;
+}
+
+async updateStaff(userId: string, staffId: string, dto: UpdateStaffDto) {
+  await this.getOwnedStaff(staffId, userId);
+  return this.prisma.client.contractorStaff.update({ where: { id: staffId }, data: dto });
+}
+
+async deleteStaff(userId: string, staffId: string) {
+  await this.getOwnedStaff(staffId, userId);
+  await this.prisma.client.contractorStaff.delete({ where: { id: staffId } });
+  return { success: true };
+}
+
+async listEquipment(userId: string, regno: string) {
+  await this.getOwned(regno, userId);
+  return this.prisma.client.contractorEquipment.findMany({
+    where: { regno },
+    orderBy: { createdAt: 'asc' },
+  });
+}
+
+async createEquipment(userId: string, dto: CreateEquipmentDto) {
+  const { regno, ...rest } = dto;
+  await this.getOwned(regno, userId);
+  return this.prisma.client.contractorEquipment.create({ data: { regno, ...rest } });
+}
+
+private async getOwnedEquipment(equipmentId: string, userId: string) {
+  const equipment = await this.prisma.client.contractorEquipment.findUnique({
+    where: { id: equipmentId },
+    include: { company: true },
+  });
+  if (!equipment) throw new NotFoundException('Equipment not found');
+  if (equipment.company.userId !== userId) throw new ForbiddenException('This equipment does not belong to you');
+  return equipment;
+}
+
+async updateEquipment(userId: string, equipmentId: string, dto: UpdateEquipmentDto) {
+  await this.getOwnedEquipment(equipmentId, userId);
+  return this.prisma.client.contractorEquipment.update({ where: { id: equipmentId }, data: dto });
+}
+
+async deleteEquipment(userId: string, equipmentId: string) {
+  await this.getOwnedEquipment(equipmentId, userId);
+  await this.prisma.client.contractorEquipment.delete({ where: { id: equipmentId } });
+  return { success: true };
+}
+
+async listProjectExperience(userId: string, regno: string) {
+  await this.getOwned(regno, userId);
+  return this.prisma.client.contractorProjectExperience.findMany({
+    where: { regno },
+    orderBy: { createdAt: 'asc' },
+  });
+}
+
+async createProjectExperience(userId: string, dto: CreateProjectExperienceDto) {
+  const { regno, ...rest } = dto;
+  await this.getOwned(regno, userId);
+  return this.prisma.client.contractorProjectExperience.create({ data: { regno, ...rest } });
+}
+
+private async getOwnedProjectExperience(id: string, userId: string) {
+  const record = await this.prisma.client.contractorProjectExperience.findUnique({
+    where: { id },
+    include: { company: true },
+  });
+  if (!record) throw new NotFoundException('Project experience entry not found');
+  if (record.company.userId !== userId) throw new ForbiddenException('This entry does not belong to you');
+  return record;
+}
+
+async updateProjectExperience(userId: string, id: string, dto: UpdateProjectExperienceDto) {
+  await this.getOwnedProjectExperience(id, userId);
+  return this.prisma.client.contractorProjectExperience.update({ where: { id }, data: dto });
+}
+
+async deleteProjectExperience(userId: string, id: string) {
+  await this.getOwnedProjectExperience(id, userId);
+  await this.prisma.client.contractorProjectExperience.delete({ where: { id } });
+  return { success: true };
+}
+async listLitigation(userId: string, regno: string) {
+  await this.getOwned(regno, userId);
+  return this.prisma.client.contractorLitigation.findMany({
+    where: { regno },
+    orderBy: { createdAt: 'asc' },
+  });
+}
+
+async createLitigation(userId: string, dto: CreateLitigationDto) {
+  const { regno, ...rest } = dto;
+  await this.getOwned(regno, userId);
+  return this.prisma.client.contractorLitigation.create({ data: { regno, ...rest } });
+}
+
+private async getOwnedLitigation(id: string, userId: string) {
+  const record = await this.prisma.client.contractorLitigation.findUnique({
+    where: { id },
+    include: { company: true },
+  });
+  if (!record) throw new NotFoundException('Litigation entry not found');
+  if (record.company.userId !== userId) throw new ForbiddenException('This entry does not belong to you');
+  return record;
+}
+
+async updateLitigation(userId: string, id: string, dto: UpdateLitigationDto) {
+  await this.getOwnedLitigation(id, userId);
+  return this.prisma.client.contractorLitigation.update({ where: { id }, data: dto });
+}
+
+async deleteLitigation(userId: string, id: string) {
+  await this.getOwnedLitigation(id, userId);
+  await this.prisma.client.contractorLitigation.delete({ where: { id } });
+  return { success: true };
+}
+
+async getClassification(userId: string, regno: string) {
+  await this.getOwned(regno, userId);
+  return this.prisma.client.contractorClassification.findUnique({ where: { regno } });
+}
+
+async upsertClassification(userId: string, dto: UpsertClassificationDto) {
+  const { regno, ...rest } = dto;
+  await this.getOwned(regno, userId);
+  return this.prisma.client.contractorClassification.upsert({
+    where: { regno },
+    create: { regno, ...rest },
+    update: rest,
+  });
+}
+
+async submitApplication(userId: string, regno: string) {
+  const application = await this.getOwned(regno, userId);
+
+  const classification = await this.prisma.client.contractorClassification.findUnique({ where: { regno } });
+
+  const lastSegment = regno.split('/').pop() ?? regno;
+  const priorCount = await this.prisma.client.contractorApplication.count({ where: { regno } });
+  const trackNo = `${lastSegment}_${priorCount + 1}`;
+
+  const classesApplied = classification
+    ? [
+        `Building Works: ${classification.buildingWorksCategory}`,
+        `Road Works: ${classification.roadWorksCategory}`,
+        `Water Works: ${classification.waterWorksCategory}`,
+        classification.electricalSubClasses.length > 0
+          ? `Electrical (${classification.electricalCategory}): ${classification.electricalSubClasses.join(', ')}`
+          : null,
+        classification.mechanicalSubClasses.length > 0
+          ? `Mechanical (${classification.mechanicalCategory}): ${classification.mechanicalSubClasses.join(', ')}`
+          : null,
+      ].filter(Boolean).join(' | ')
+    : '';
+
+  return this.prisma.client.contractorApplication.create({
+    data: {
+      regno,
+      trackNo,
+      companyName: application.firmName,
+      classesApplied,
+      applicationType: classification?.applicationType ?? 'New Application',
+      localForeign: application.localForeign,
+    },
+  });
+}
+
+async listMySubmissions(userId: string) {
+  return this.prisma.client.contractorApplication.findMany({
+    where: { company: { userId } },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+async getSubmission(userId: string, id: string) {
+  const submission = await this.prisma.client.contractorApplication.findUnique({
+    where: { id },
+    include: { company: true },
+  });
+  if (!submission) throw new NotFoundException('Application not found');
+  if (submission.company.userId !== userId) throw new ForbiddenException('This application does not belong to you');
+  return submission;
+}
 }

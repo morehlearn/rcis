@@ -6,6 +6,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { ContractorApplicationsModule } from './contractor-applications/contractor-applications.module';
 import { FilesModule } from './files/files.module';
+import { BrsModule } from './brs/brs.module';
 
 @Module({
   imports: [
@@ -13,7 +14,8 @@ import { FilesModule } from './files/files.module';
     PrismaModule,
     AuthModule,
     ContractorApplicationsModule,
-    FilesModule
+    FilesModule,
+    BrsModule
   ],
   controllers: [AppController],
   providers: [AppService],

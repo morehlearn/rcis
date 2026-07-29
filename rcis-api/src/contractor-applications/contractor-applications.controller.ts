@@ -8,7 +8,8 @@ import { Body,
   Query, 
   UploadedFile, 
   UseGuards, 
-  UseInterceptors 
+  UseInterceptors,
+  Put
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -24,11 +25,31 @@ import { UpdateOfficeDto,  } from './dto/update-office.dto';
 import { UpdateFirmProfileDto,  } from './dto/update-firm-profile.dto';
 import { CreateRefereeDto } from './dto/create-referee.dto';
 import { UpdateRefereeDto } from './dto/update-referee.dto';
+import { CreateAssetDto } from './dto/create-asset.dto';
+import { UpdateAssetDto } from './dto/update-asset.dto';
+import { CreateStaffDto } from './dto/create-staff.dto';
+import { UpdateStaffDto } from './dto/update-staff.dto';
+import { CreateEquipmentDto } from './dto/create-equipment.dto';
+import { UpdateEquipmentDto } from './dto/update-equipment.dto';
+import { CreateProjectExperienceDto } from './dto/create-project-experience.dto';
+import { UpdateProjectExperienceDto } from './dto/update-project-experience.dto';
+import { CreateLitigationDto } from './dto/create-litigation.dto';
+import { UpdateLitigationDto } from './dto/update-litigation.dto';
+import { UpsertClassificationDto } from './dto/upsert-classification.dto';
+
+
 UpdateFirmProfileDto 
 @UseGuards(JwtAuthGuard)
 @Controller('contractor-applications')
 export class ContractorApplicationsController {
   constructor(private service: ContractorApplicationsService) {}
+
+
+  //BRS Verification
+@Get('verify-company')
+verifyCompany(@CurrentUser() user: { userId: string }, @Query('registrationNumber') registrationNumber: string) {
+  return this.service.verifyCompanyRegistration(user.userId, registrationNumber);
+}
 
   @Post()
   createFirmProfile(@CurrentUser() user: { userId: string }, @Body() dto: CreateFirmProfileDto) {
@@ -169,4 +190,126 @@ deleteReferee(@CurrentUser() user: { userId: string }, @Param('id') id: string) 
   return this.service.deleteReferee(user.userId, id);
 }
 
+@Get('assets')
+listAssets(@CurrentUser() user: { userId: string }, @Query('regno') regno: string) {
+  return this.service.listAssets(user.userId, regno);
+}
+
+@Post('assets')
+createAsset(@CurrentUser() user: { userId: string }, @Body() dto: CreateAssetDto) {
+  return this.service.createAsset(user.userId, dto);
+}
+
+@Patch('assets/:id')
+updateAsset(@CurrentUser() user: { userId: string }, @Param('id') id: string, @Body() dto: UpdateAssetDto) {
+  return this.service.updateAsset(user.userId, id, dto);
+}
+
+@Delete('assets/:id')
+deleteAsset(@CurrentUser() user: { userId: string }, @Param('id') id: string) {
+  return this.service.deleteAsset(user.userId, id);
+}
+
+@Get('staff')
+listStaff(@CurrentUser() user: { userId: string }, @Query('regno') regno: string) {
+  return this.service.listStaff(user.userId, regno);
+}
+
+@Post('staff')
+createStaff(@CurrentUser() user: { userId: string }, @Body() dto: CreateStaffDto) {
+  return this.service.createStaff(user.userId, dto);
+}
+
+@Patch('staff/:id')
+updateStaff(@CurrentUser() user: { userId: string }, @Param('id') id: string, @Body() dto: UpdateStaffDto) {
+  return this.service.updateStaff(user.userId, id, dto);
+}
+
+@Delete('staff/:id')
+deleteStaff(@CurrentUser() user: { userId: string }, @Param('id') id: string) {
+  return this.service.deleteStaff(user.userId, id);
+}
+
+@Get('equipment')
+listEquipment(@CurrentUser() user: { userId: string }, @Query('regno') regno: string) {
+  return this.service.listEquipment(user.userId, regno);
+}
+
+@Post('equipment')
+createEquipment(@CurrentUser() user: { userId: string }, @Body() dto: CreateEquipmentDto) {
+  return this.service.createEquipment(user.userId, dto);
+}
+
+@Patch('equipment/:id')
+updateEquipment(@CurrentUser() user: { userId: string }, @Param('id') id: string, @Body() dto: UpdateEquipmentDto) {
+  return this.service.updateEquipment(user.userId, id, dto);
+}
+
+@Delete('equipment/:id')
+deleteEquipment(@CurrentUser() user: { userId: string }, @Param('id') id: string) {
+  return this.service.deleteEquipment(user.userId, id);
+}
+
+@Get('project-experience')
+listProjectExperience(@CurrentUser() user: { userId: string }, @Query('regno') regno: string) {
+  return this.service.listProjectExperience(user.userId, regno);
+}
+
+@Post('project-experience')
+createProjectExperience(@CurrentUser() user: { userId: string }, @Body() dto: CreateProjectExperienceDto) {
+  return this.service.createProjectExperience(user.userId, dto);
+}
+
+@Patch('project-experience/:id')
+updateProjectExperience(@CurrentUser() user: { userId: string }, @Param('id') id: string, @Body() dto: UpdateProjectExperienceDto) {
+  return this.service.updateProjectExperience(user.userId, id, dto);
+}
+
+@Delete('project-experience/:id')
+deleteProjectExperience(@CurrentUser() user: { userId: string }, @Param('id') id: string) {
+  return this.service.deleteProjectExperience(user.userId, id);
+}
+
+@Get('litigation')
+listLitigation(@CurrentUser() user: { userId: string }, @Query('regno') regno: string) {
+  return this.service.listLitigation(user.userId, regno);
+}
+
+@Post('litigation')
+createLitigation(@CurrentUser() user: { userId: string }, @Body() dto: CreateLitigationDto) {
+  return this.service.createLitigation(user.userId, dto);
+}
+
+@Patch('litigation/:id')
+updateLitigation(@CurrentUser() user: { userId: string }, @Param('id') id: string, @Body() dto: UpdateLitigationDto) {
+  return this.service.updateLitigation(user.userId, id, dto);
+}
+
+@Delete('litigation/:id')
+deleteLitigation(@CurrentUser() user: { userId: string }, @Param('id') id: string) {
+  return this.service.deleteLitigation(user.userId, id);
+}
+
+@Get('classification')
+getClassification(@CurrentUser() user: { userId: string }, @Query('regno') regno: string) {
+  return this.service.getClassification(user.userId, regno);
+}
+
+@Put('classification')
+upsertClassification(@CurrentUser() user: { userId: string }, @Body() dto: UpsertClassificationDto) {
+  return this.service.upsertClassification(user.userId, dto);
+}
+@Get('my-submissions')
+listMySubmissions(@CurrentUser() user: { userId: string }) {
+  return this.service.listMySubmissions(user.userId);
+}
+
+@Patch('submit')
+submitApplication(@CurrentUser() user: { userId: string }, @Body('regno') regno: string) {
+  return this.service.submitApplication(user.userId, regno);
+}
+@Get('submissions/:id')
+getSubmission(@CurrentUser() user: { userId: string }, @Param('id') id: string) {
+  return this.service.getSubmission(user.userId, id);
+}
 }

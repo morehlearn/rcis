@@ -138,39 +138,48 @@ export default function DirectorsStep({
               </tr>
             </thead>
             <tbody>
-              {directors.map((d) => (
-                <tr key={d.id} className="border-t border-slate-100">
-                  <td className="px-3 py-2 text-slate-700">{d.fullNames}</td>
-                  <td className="px-3 py-2 text-slate-600">{d.idNo}</td>
-                  <td className="px-3 py-2 text-slate-600">{d.nationality}</td>
-                  <td className="px-3 py-2 text-slate-600">{d.highestQualification}</td>
-                  <td className="px-3 py-2 text-slate-600">{d.profession}</td>
-                  <td className="px-3 py-2 text-slate-600">{d.yearsOfExperience}</td>
-                  <td className="px-3 py-2 text-slate-600">{d.percentageShare}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleEdit(d)}
-                        className="p-1.5 rounded text-white"
-                        style={{ backgroundColor: 'var(--rcis-primary)' }}
-                        aria-label="Edit"
-                      >
-                        <Pencil size={12} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(d.id)}
-                        disabled={deletingId === d.id}
-                        className="p-1.5 rounded text-white bg-red-600 disabled:opacity-50"
-                        aria-label="Delete"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {directors.map((d) => {
+                    const isComplete = !!d.highestQualification && !!d.profession && !!d.yearsOfExperience && !!d.cvFileName;
+                    return (
+                      <tr key={d.id} className="border-t border-slate-100">
+                        <td className="px-3 py-2 text-slate-700">
+                          {d.fullNames}
+                          {!isComplete && (
+                            <span className="ml-2 inline-block px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 text-amber-700">
+                              Incomplete
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-slate-600">{d.idNo}</td>
+                        <td className="px-3 py-2 text-slate-600">{d.nationality}</td>
+                        <td className="px-3 py-2 text-slate-600">{d.highestQualification || '—'}</td>
+                        <td className="px-3 py-2 text-slate-600">{d.yearsOfExperience || '—'}</td>
+                        <td className="px-3 py-2 text-slate-600">{d.percentageShare}</td>
+                        <td className="px-3 py-2">
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleEdit(d)}
+                              className="p-1.5 rounded text-white"
+                              style={{ backgroundColor: 'var(--rcis-primary)' }}
+                              aria-label="Edit"
+                            >
+                              <Pencil size={12} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(d.id)}
+                              disabled={deletingId === d.id}
+                              className="p-1.5 rounded text-white bg-red-600 disabled:opacity-50"
+                              aria-label="Delete"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
             </tbody>
           </table>
         </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import {useEffect, useRef, useState } from 'react';
 import { Field, inputCls } from '../Field';
 import {
   FIRM_TYPES, BANKS, AGENCIES, ASSOCIATIONS, AGPO_CATEGORIES, type FirmRegistrationData,
@@ -21,6 +21,19 @@ function SectionHeading({ children }: { children: string }) {
 
 export default function FirmRegistrationStep({ data, errors, onChange, onCategoriesChange }: FirmRegistrationStepProps) {
   const [categoriesOpen, setCategoriesOpen] = useState(false);
+
+  const categoriesRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!categoriesOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (categoriesRef.current && !categoriesRef.current.contains(e.target as Node)) {
+        setCategoriesOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [categoriesOpen]);
 
   const toggleCategory = (category: string) => {
     const next = data.agpoCategories.includes(category)
@@ -226,7 +239,7 @@ export default function FirmRegistrationStep({ data, errors, onChange, onCategor
           {data.hasAgpoCertificate === 'Yes' && (
             <>
               <Field label="AGPO Category">
-                <div className="relative">
+                  <div className="relative" ref={categoriesRef}>
                   <button
                     type="button"
                     onClick={() => setCategoriesOpen((o) => !o)}

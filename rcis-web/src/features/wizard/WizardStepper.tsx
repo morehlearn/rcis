@@ -9,38 +9,37 @@ interface WizardStepperProps {
 
 export default function WizardStepper({ steps, activeStep, visited, onStepClick }: WizardStepperProps) {
   return (
-    <div className="overflow-x-auto">
-      <ol className="flex min-w-max">
-        {steps.map((step, i) => {
-          const isActive = i === activeStep;
-          const isDone = i < activeStep;
-          const isClickable = visited.has(i);
+    <ol className="flex flex-wrap items-center gap-x-1.5 gap-y-2">
+      {steps.map((step, i) => {
+        const isActive = i === activeStep;
+        const isDone = i < activeStep;
+        const isClickable = visited.has(i);
 
-          return (
-            <li key={step} className="flex items-center">
-              <button
-                disabled={!isClickable}
-                onClick={() => onStepClick(i)}
-                className={`flex items-center gap-2 px-3 py-2 text-xs font-medium whitespace-nowrap rounded ${
-                  isClickable ? 'cursor-pointer' : 'cursor-default'
-                }`}
+        return (
+          <li key={step}>
+            <button
+              disabled={!isClickable}
+              onClick={() => onStepClick(i)}
+              title={step}
+              aria-label={step}
+              className={`flex items-center gap-1.5 px-1.5 py-1 text-xs font-medium whitespace-nowrap rounded ${
+                isClickable ? 'cursor-pointer hover:bg-slate-50' : 'cursor-default'
+              }`}
+            >
+              <span
+                className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] shrink-0"
+                style={{
+                  backgroundColor: isActive || isDone ? 'var(--rcis-primary)' : '#e2e8f0',
+                  color: isActive || isDone ? '#fff' : '#64748b',
+                }}
               >
-                <span
-                  className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] shrink-0"
-                  style={{
-                    backgroundColor: isActive || isDone ? 'var(--rcis-primary)' : '#e2e8f0',
-                    color: isActive || isDone ? '#fff' : '#64748b',
-                  }}
-                >
-                  {isDone ? <Check size={12} /> : i + 1}
-                </span>
-                <span className={isActive ? 'text-slate-800' : 'text-slate-500'}>{step}</span>
-              </button>
-              {i < steps.length - 1 && <span className="w-6 h-px bg-slate-200 shrink-0" />}
-            </li>
-          );
-        })}
-      </ol>
-    </div>
+                {isDone ? <Check size={13} /> : i + 1}
+              </span>
+              {isActive && <span className="text-slate-800">{step}</span>}
+            </button>
+          </li>
+        );
+      })}
+    </ol>
   );
 }

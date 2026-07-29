@@ -243,3 +243,169 @@ export const emptyRefereeDraft: Omit<Referee, 'id'> = {
   telephone: '',
   profession: '',
 };
+
+export interface Asset {
+  id: string;
+  description: string;
+  registrationNo: string;
+}
+
+export const emptyAssetDraft: Omit<Asset, 'id'> = {
+  description: '',
+  registrationNo: '',
+};
+
+// --- Step 8: Staff ---
+
+export interface Staff {
+  id: string;
+  fullNames: string;
+  idNo: string;
+  nationality: string;
+  highestQualification: string;
+  yearsOfExperience: string;
+}
+
+export const emptyStaffDraft: Omit<Staff, 'id'> = {
+  fullNames: '',
+  idNo: '',
+  nationality: 'Kenyan',
+  highestQualification: '',
+  yearsOfExperience: '',
+};
+
+// --- Step 9: Equipment & Plant ---
+
+export interface Equipment {
+  id: string;
+  name: string;
+  ownedOrLeased: string;
+  typeMakeModel: string;
+  category: string;
+  registrationNo: string;
+}
+
+export const emptyEquipmentDraft: Omit<Equipment, 'id'> = {
+  name: '',
+  ownedOrLeased: '',
+  typeMakeModel: '',
+  category: '',
+  registrationNo: '',
+};
+
+export const OWNED_OR_LEASED = ['Owned', 'Leased'];
+
+export const EQUIPMENT_CATEGORIES = [
+  'Earthmoving Equipment', 'Lifting Equipment', 'Concrete Equipment',
+  'Transport Vehicles', 'Compaction Equipment', 'Other',
+];
+
+// --- Step 10: Project Experience ---
+
+export interface ProjectExperience {
+  id: string;
+  project: string;
+  ncaProjectRegNo: string;
+  contractSum: string;
+  contractPeriod: string;
+}
+
+export const emptyProjectExperienceDraft: Omit<ProjectExperience, 'id'> = {
+  project: '',
+  ncaProjectRegNo: '',
+  contractSum: '',
+  contractPeriod: '',
+};
+
+// --- Step 11: Litigation History ---
+
+export interface Litigation {
+  id: string;
+  refNo: string;
+  date: string;
+  partiesInvolved: string;
+  particularOfLitigation: string;
+  statusOfMatter: string;
+}
+
+export const emptyLitigationDraft: Omit<Litigation, 'id'> = {
+  refNo: '',
+  date: '',
+  partiesInvolved: '',
+  particularOfLitigation: '',
+  statusOfMatter: '',
+};
+
+
+// --- Step 13: Classification ---
+
+export const APPLICATION_TYPES = ['New Application', 'Renewal', 'Upgrade', 'Downgrade'];
+
+export const NCA_CATEGORIES = ['NCA1', 'NCA2', 'NCA3', 'NCA4', 'NCA5', 'NCA6', 'NCA7', 'NCA8'];
+
+export interface SubClassOption {
+  code: string;
+  label: string;
+  requiredAttachment?: string;
+}
+
+export const ELECTRICAL_SUBCLASSES: SubClassOption[] = [
+  { code: 'EES1', label: 'Electrical Installation', requiredAttachment: 'EPRA Certificate (Min C2)' },
+  { code: 'EES2', label: 'Electronic', requiredAttachment: 'EPRA Certificate (Min A2)' },
+  { code: 'EES3', label: 'Lift hoists, escalators, mechanical ramps, travolators, conveyors and belt installation', requiredAttachment: 'EPRA Certificate (C2)' },
+  { code: 'EES4', label: 'Generating plants and Control Panels', requiredAttachment: 'EPRA Certificate (C2)' },
+  { code: 'EES5', label: 'Solar Power Generation and Photovoltaic cells installations', requiredAttachment: 'EPRA Certificate (V2)' },
+  { code: 'EES6', label: 'Water Tanks, Treatment Plant and Pumping Plant' },
+  { code: 'EES7', label: 'Compressed Air, Hydraulic, Lp and Mechanical Gas installation' },
+  { code: 'EES8', label: 'Installation of Uninterrupted Power supply Systems (UPS), Automatic Voltage Regulators (AVR) and Surge Protectors' },
+  { code: 'EES9', label: 'Retrofitting for Improving Energy Efficiency' },
+  { code: 'EES10', label: 'Construction of Power Transmission Lines and Installation of Power Distributors Equipment', requiredAttachment: 'EPRA Certificate (C2)' },
+  { code: 'EES11', label: 'Electronic communications (public address systems and conferences systems)' },
+  { code: 'EES12', label: 'Radio Communications', requiredAttachment: 'CAK License' },
+  { code: 'EES13', label: 'Structured Cabling and computer networking Installations', requiredAttachment: 'CAK License' },
+  { code: 'EES14', label: 'Security Surveillance Systems (CCTV) intruder Alarm and access control systems' },
+  { code: 'EES15', label: 'Telecommunications PABX, intercoms and telephone wiring', requiredAttachment: 'CAK License' },
+];
+
+export const MECHANICAL_SUBCLASSES: SubClassOption[] = [
+  { code: 'MES1', label: 'Plumbing, Drainage and Sanitary Fittings', requiredAttachment: 'Plumbers & Drain Layers License' },
+  { code: 'MES2', label: 'Refrigeration, cold rooms, Air-Conditioning and Ventilation' },
+  { code: 'MES3', label: 'Kitchen and Laundry Equipment and Refuse Disposal Systems' },
+  { code: 'MES4', label: 'Boilers, Incinerators and Pressure Vessels', requiredAttachment: 'Boilers/Fabricator Inspector Certificate' },
+  { code: 'MES5', label: 'Solar Heating Systems' },
+  { code: 'MES6', label: 'Water Tanks, Treatment Plant and Pumping Plant' },
+  { code: 'MES7', label: 'Compressed Air, Hydraulic, Lp and Mechanical Gas installation' },
+  { code: 'MES8', label: 'Cranes and Hoists' },
+  { code: 'MES9', label: 'Fire Engineering Services' },
+  { code: 'MES10', label: 'Health club facilities' },
+  { code: 'MES11', label: 'Borehole equipment' },
+  { code: 'MES12', label: 'Hospital Equipment' },
+  { code: 'MES13', label: 'Mobile Shelving' },
+  { code: 'MES14', label: 'Roof rain-water harvesting' },
+  { code: 'MES15', label: 'Laboratory installations and Fume cupboards' },
+  { code: 'MES16', label: 'Swimming pool installation' },
+  { code: 'MES17', label: 'Oil storage, Pumping Reticulation' },
+];
+
+export interface ClassificationData {
+  applicationType: string;
+  buildingWorksCategory: string;
+  roadWorksCategory: string;
+  waterWorksCategory: string;
+  electricalSubClasses: string[];
+  electricalCategory: string;
+  mechanicalSubClasses: string[];
+  mechanicalCategory: string;
+}
+
+export const emptyClassification: ClassificationData = {
+  applicationType: 'New Application',
+  buildingWorksCategory: 'NCA1',
+  roadWorksCategory: 'NCA1',
+  waterWorksCategory: 'NCA1',
+  electricalSubClasses: [],
+  electricalCategory: 'NCA1',
+  mechanicalSubClasses: [],
+  mechanicalCategory: 'NCA1',
+};
+

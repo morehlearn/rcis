@@ -11,11 +11,20 @@ import DirectorsStep from '@/features/wizard/steps/DirectorsStep';
 import OfficesStep from '@/features/wizard/steps/OfficesStep';
 import RefereesStep from '@/features/wizard/steps/RefereesStep';
 import ApplicationRequirementsModal from '@/features/wizard/ApplicationRequirementsModal';
-import { WIZARD_STEPS, MODE_LABELS, resolveMode } from '@/features/wizard/wizard-config';
+import { WIZARD_STEPS, MODE_LABELS, resolveMode, MODE_TO_APPLICATION_TYPE } from '@/features/wizard/wizard-config';
+import AssetsStep from '@/features/wizard/steps/AssetsStep';
+import StaffStep from '@/features/wizard/steps/StaffStep';
+import EquipmentStep from '@/features/wizard/steps/EquipmentStep';
+import ProjectExperienceStep from '@/features/wizard/steps/ProjectExperienceStep';
+import LitigationStep from '@/features/wizard/steps/LitigationStep';
+import AttachmentsStep from '@/features/wizard/steps/AttachmentsStep';
+import ClassificationStep from '@/features/wizard/steps/ClassificationStep';
 import {
-  emptyFirmProfile, emptyFirmRegistration, emptyDeclarations,
-  type FirmProfileData, type FirmRegistrationData, type DeclarationsData, type Director, type Office, type Referee,
+  emptyFirmProfile, emptyFirmRegistration, emptyDeclarations,emptyClassification,
+  type FirmProfileData, type FirmRegistrationData, type DeclarationsData, type Director, type Office, type Referee, type ClassificationData,
 } from '@/features/wizard/wizard-types';
+import SummaryStep from '@/features/wizard/steps/SummaryStep';
+
 import {
   createFirmProfile, updateFirmProfile, updateFirmRegistration, updateDeclarations, listMyApplications,
   listDirectors, createDirector, updateDirector, deleteDirector,
@@ -23,7 +32,13 @@ import {
   listOffices, createOffice, updateOffice, deleteOffice, type ContractorOfficeRecord,
   listDocuments, uploadDocument, getDocumentUrl, deleteDocument, type ContractorDocumentRecord,
   listReferees, createReferee, updateReferee, deleteReferee, type ContractorRefereeRecord,
-} from '@/lib/api';
+ listAssets, createAsset, updateAsset, deleteAsset, type ContractorAssetRecord, 
+ listStaff, createStaff, updateStaff, deleteStaff, type ContractorStaffRecord,
+ listEquipment, createEquipment, updateEquipment, deleteEquipment, type ContractorEquipmentRecord,
+ listProjectExperience, createProjectExperience, updateProjectExperience, deleteProjectExperience, type ContractorProjectExperienceRecord,
+ listLitigation, createLitigation, updateLitigation, deleteLitigation, type ContractorLitigationRecord,
+ getClassification, upsertClassification, verifyCompanyRegistration, type BrsDirector,
+submitApplication,} from '@/lib/api';
 
 type FirmProfileErrors = Partial<Record<keyof FirmProfileData, string>>;
 type FirmRegistrationErrors = Partial<Record<keyof FirmRegistrationData, string>>;
@@ -82,9 +97,58 @@ export default function ApplicationWizardPage() {
   const [refereesSaving, setRefereesSaving] = useState(false);
   const [refereesLoadedFor, setRefereesLoadedFor] = useState<string | null>(null);
 
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [assetsError, setAssetsError] = useState('');
+  const [assetsLoading, setAssetsLoading] = useState(false);
+  const [assetsSaving, setAssetsSaving] = useState(false);
+  const [assetsLoadedFor, setAssetsLoadedFor] = useState<string | null>(null);
+
+  const [staff, setStaff] = useState<Staff[]>([]);
+  const [staffError, setStaffError] = useState('');
+  const [staffLoading, setStaffLoading] = useState(false);
+  const [staffSaving, setStaffSaving] = useState(false);
+  const [staffLoadedFor, setStaffLoadedFor] = useState<string | null>(null);
+
+  const [equipment, setEquipment] = useState<Equipment[]>([]);
+  const [equipmentError, setEquipmentError] = useState('');
+  const [equipmentLoading, setEquipmentLoading] = useState(false);
+  const [equipmentSaving, setEquipmentSaving] = useState(false);
+  const [equipmentLoadedFor, setEquipmentLoadedFor] = useState<string | null>(null);
+
+  const [projects, setProjects] = useState<ProjectExperience[]>([]);
+  const [projectsError, setProjectsError] = useState('');
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [projectsSaving, setProjectsSaving] = useState(false);
+  const [projectsLoadedFor, setProjectsLoadedFor] = useState<string | null>(null);
+
+  const [litigation, setLitigation] = useState<Litigation[]>([]);
+  const [litigationError, setLitigationError] = useState('');
+  const [litigationLoading, setLitigationLoading] = useState(false);
+  const [litigationSaving, setLitigationSaving] = useState(false);
+  const [litigationLoadedFor, setLitigationLoadedFor] = useState<string | null>(null);
+
+  const [classification, setClassification] = useState<ClassificationData>({
+  ...emptyClassification,
+  applicationType: MODE_TO_APPLICATION_TYPE[mode],
+});
+  const [classificationErrors, setClassificationErrors] = useState<Partial<Record<keyof ClassificationData, string>>>({});
+  const [classificationLoadedFor, setClassificationLoadedFor] = useState<string | null>(null);
+
+  // Set from the loaded/created ContractorCompany record's own status field -
+  // controls whether Summary shows the editable review or the "submitted,
+  // read-only" state.
+  const [justSubmittedTrackNo, setJustSubmittedTrackNo] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+
   // regno is assigned by the backend the moment Step 1 saves successfully.
   // Every subsequent step's PATCH call needs it, so it lives at wizard level.
   const [regno, setRegno] = useState<string | null>(null);
+
+  const [verifying, setVerifying] = useState(false);
+  const [verifyMessage, setVerifyMessage] = useState<{ type: 'error' | 'warning' | 'info'; text: string } | undefined>();
+  const [pendingBrsDirectors, setPendingBrsDirectors] = useState<BrsDirector[]>([]);
+
 
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [saving, setSaving] = useState(false);
@@ -159,12 +223,37 @@ export default function ApplicationWizardPage() {
         let resumeStep = declarationsDone ? 3 : registrationDone ? 2 : 1;
 
         if (declarationsDone) {
-          const [directorRecords, officeRecords, refereeRecords] = await Promise.all([
+          const [directorRecords, officeRecords, refereeRecords, assetRecords, staffRecords, equipmentRecords, projectRecords, litigationRecords, classificationRecord] = await Promise.all([
             listDirectors(app.regno).catch(() => []),
             listOffices(app.regno).catch(() => []),
             listReferees(app.regno).catch(() => []),
+            listAssets(app.regno).catch(() => []),
+            listStaff(app.regno).catch(() => []),
+            listEquipment(app.regno).catch(() => []),
+            listProjectExperience(app.regno).catch(() => []),
+            listLitigation(app.regno).catch(() => []),
+            getClassification(app.regno).catch(() => null),
           ]);
-          if (refereeRecords.length > 0) resumeStep = 5;
+          if (classificationRecord) {
+            setClassification({
+              applicationType: classificationRecord.applicationType,
+              buildingWorksCategory: classificationRecord.buildingWorksCategory,
+              roadWorksCategory: classificationRecord.roadWorksCategory,
+              waterWorksCategory: classificationRecord.waterWorksCategory,
+              electricalSubClasses: classificationRecord.electricalSubClasses,
+              electricalCategory: classificationRecord.electricalCategory,
+              mechanicalSubClasses: classificationRecord.mechanicalSubClasses,
+              mechanicalCategory: classificationRecord.mechanicalCategory,
+            });
+            setClassificationLoadedFor(app.regno);
+          }
+          if (classificationRecord) resumeStep = 12;
+          else if (litigationRecords.length > 0) resumeStep = 10;
+          else if (projectRecords.length > 0) resumeStep = 9;
+          else if (equipmentRecords.length > 0) resumeStep = 8;
+          else if (staffRecords.length > 0) resumeStep = 7;
+          else if (assetRecords.length > 0) resumeStep = 6;
+          else if (refereeRecords.length > 0) resumeStep = 5;
           else if (officeRecords.length > 0) resumeStep = 4;
           else if (directorRecords.length > 0) resumeStep = 3;
         }
@@ -211,6 +300,27 @@ export default function ApplicationWizardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeStep, regno]);
 
+  useEffect(() => {
+    if (!regno || pendingBrsDirectors.length === 0) return;
+    Promise.all(pendingBrsDirectors.map((d) => createDirector({
+      regno,
+      idNo: d.idNo,
+      fullNames: d.fullNames,
+      nationality: d.nationality,
+      highestQualification: '',
+      profession: '',
+      yearsOfExperience: '',
+      percentageShare: d.percentageShare,
+    })))
+      .then((created) => {
+        setDirectors((prev) => [...prev, ...created.map(toDirector)]);
+        setPendingBrsDirectors([]);
+      })
+      .catch(() => {
+        // Leave pendingBrsDirectors as-is; directors can still be added manually at Step 4.
+      });
+  }, [regno, pendingBrsDirectors]);
+
   const toOffice = (record: ContractorOfficeRecord): Office => ({
     id: record.id,
     town: record.town,
@@ -221,7 +331,8 @@ export default function ApplicationWizardPage() {
   // Same idea as Directors: load offices and the shared document pool the
   // first time Step 5 is reached for a given regno.
   useEffect(() => {
-    if ((activeStep !== 4 && activeStep !== 5) || !regno) return;
+  if ((activeStep !== 4 && activeStep !== 5 && activeStep !== 6 && activeStep !== 7 && activeStep !== 8 && activeStep !== 9 && activeStep !== 10 && activeStep !== 11 && activeStep !== 12) || !regno) return;
+    return;
 
     if (activeStep === 4 && officesLoadedFor !== regno) {
       setOfficesLoading(true);
@@ -276,9 +387,278 @@ export default function ApplicationWizardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeStep, regno]);
 
+
+  const toAsset = (record: ContractorAssetRecord): Asset => ({
+    id: record.id,
+    description: record.description,
+    registrationNo: record.registrationNo,
+  });
+
+  useEffect(() => {
+    if (activeStep !== 6 || !regno || assetsLoadedFor === regno) return;
+
+    setAssetsLoading(true);
+    listAssets(regno)
+      .then((records) => {
+        setAssets(records.map(toAsset));
+        setAssetsLoadedFor(regno);
+      })
+      .catch((err) => {
+        setAssetsError(err instanceof Error ? err.message : 'Could not load assets.');
+      })
+      .finally(() => setAssetsLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStep, regno]);
+
+  const toStaff = (record: ContractorStaffRecord): Staff => ({
+    id: record.id,
+    fullNames: record.fullNames,
+    idNo: record.idNo,
+    nationality: record.nationality,
+    highestQualification: record.highestQualification,
+    yearsOfExperience: record.yearsOfExperience,
+  });
+
+  useEffect(() => {
+    if (activeStep !== 7 || !regno || staffLoadedFor === regno) return;
+
+    setStaffLoading(true);
+    listStaff(regno)
+      .then((records) => {
+        setStaff(records.map(toStaff));
+        setStaffLoadedFor(regno);
+      })
+      .catch((err) => {
+        setStaffError(err instanceof Error ? err.message : 'Could not load staff.');
+      })
+      .finally(() => setStaffLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStep, regno]);
+
+  const toEquipment = (record: ContractorEquipmentRecord): Equipment => ({
+    id: record.id,
+    name: record.name,
+    ownedOrLeased: record.ownedOrLeased,
+    typeMakeModel: record.typeMakeModel,
+    category: record.category,
+    registrationNo: record.registrationNo,
+  });
+
+  useEffect(() => {
+    if (activeStep !== 8 || !regno || equipmentLoadedFor === regno) return;
+
+    setEquipmentLoading(true);
+    listEquipment(regno)
+      .then((records) => {
+        setEquipment(records.map(toEquipment));
+        setEquipmentLoadedFor(regno);
+      })
+      .catch((err) => {
+        setEquipmentError(err instanceof Error ? err.message : 'Could not load equipment.');
+      })
+      .finally(() => setEquipmentLoading(false));
+  }, [activeStep, regno]);
+
+
+  const toProjectExperience = (record: ContractorProjectExperienceRecord): ProjectExperience => ({
+    id: record.id,
+    project: record.project,
+    ncaProjectRegNo: record.ncaProjectRegNo,
+    contractSum: record.contractSum,
+    contractPeriod: record.contractPeriod,
+  });
+
+  useEffect(() => {
+    if (activeStep !== 9 || !regno || projectsLoadedFor === regno) return;
+
+    setProjectsLoading(true);
+    listProjectExperience(regno)
+      .then((records) => {
+        setProjects(records.map(toProjectExperience));
+        setProjectsLoadedFor(regno);
+      })
+      .catch((err) => {
+        setProjectsError(err instanceof Error ? err.message : 'Could not load project experience.');
+      })
+      .finally(() => setProjectsLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStep, regno]);
+
+  const toLitigation = (record: ContractorLitigationRecord): Litigation => ({
+    id: record.id,
+    refNo: record.refNo,
+    date: record.date,
+    partiesInvolved: record.partiesInvolved,
+    particularOfLitigation: record.particularOfLitigation,
+    statusOfMatter: record.statusOfMatter,
+  });
+
+  useEffect(() => {
+    if (activeStep !== 10 || !regno || litigationLoadedFor === regno) return;
+
+    setLitigationLoading(true);
+    listLitigation(regno)
+      .then((records) => {
+        setLitigation(records.map(toLitigation));
+        setLitigationLoadedFor(regno);
+      })
+      .catch((err) => {
+        setLitigationError(err instanceof Error ? err.message : 'Could not load litigation history.');
+      })
+      .finally(() => setLitigationLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStep, regno]);
+
+
+useEffect(() => {
+    if (activeStep !== 12 || !regno || classificationLoadedFor === regno) return;
+
+    getClassification(regno)
+      .then((record) => {
+        if (record) {
+          setClassification({
+            applicationType: record.applicationType,
+            buildingWorksCategory: record.buildingWorksCategory,
+            roadWorksCategory: record.roadWorksCategory,
+            waterWorksCategory: record.waterWorksCategory,
+            electricalSubClasses: record.electricalSubClasses,
+            electricalCategory: record.electricalCategory,
+            mechanicalSubClasses: record.mechanicalSubClasses,
+            mechanicalCategory: record.mechanicalCategory,
+          });
+        }
+        setClassificationLoadedFor(regno);
+      })
+      .catch((err) => {
+        setApiError(err instanceof Error ? err.message : 'Could not load classification.');
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStep, regno]);
+
+  // Summary needs every collection populated, but resuming an application
+  // jumps straight to the furthest step with data - skipping the individual
+  // per-step loading effects for everything before it. This backfills
+  // whatever wasn't already loaded this session, so Summary is never
+  // showing stale "None added" for data that actually exists.
+  useEffect(() => {
+    if (activeStep !== 13 || !regno) return;
+
+    if (directorsLoadedFor !== regno) {
+      listDirectors(regno).then((records) => {
+        setDirectors(records.map(toDirector));
+        setDirectorsLoadedFor(regno);
+      }).catch(() => {});
+    }
+    if (officesLoadedFor !== regno) {
+      listOffices(regno).then((records) => {
+        setOffices(records.map(toOffice));
+        setOfficesLoadedFor(regno);
+      }).catch(() => {});
+    }
+    if (documentsLoadedFor !== regno) {
+      listDocuments(regno).then((records) => {
+        setDocuments(records);
+        setDocumentsLoadedFor(regno);
+      }).catch(() => {});
+    }
+    if (refereesLoadedFor !== regno) {
+      listReferees(regno).then((records) => {
+        setReferees(records.map(toReferee));
+        setRefereesLoadedFor(regno);
+      }).catch(() => {});
+    }
+    if (assetsLoadedFor !== regno) {
+      listAssets(regno).then((records) => {
+        setAssets(records.map(toAsset));
+        setAssetsLoadedFor(regno);
+      }).catch(() => {});
+    }
+    if (staffLoadedFor !== regno) {
+      listStaff(regno).then((records) => {
+        setStaff(records.map(toStaff));
+        setStaffLoadedFor(regno);
+      }).catch(() => {});
+    }
+    if (equipmentLoadedFor !== regno) {
+      listEquipment(regno).then((records) => {
+        setEquipment(records.map(toEquipment));
+        setEquipmentLoadedFor(regno);
+      }).catch(() => {});
+    }
+    if (projectsLoadedFor !== regno) {
+      listProjectExperience(regno).then((records) => {
+        setProjects(records.map(toProjectExperience));
+        setProjectsLoadedFor(regno);
+      }).catch(() => {});
+    }
+    if (litigationLoadedFor !== regno) {
+      listLitigation(regno).then((records) => {
+        setLitigation(records.map(toLitigation));
+        setLitigationLoadedFor(regno);
+      }).catch(() => {});
+    }
+    if (classificationLoadedFor !== regno) {
+      getClassification(regno).then((record) => {
+        if (record) {
+          setClassification({
+            applicationType: record.applicationType,
+            buildingWorksCategory: record.buildingWorksCategory,
+            roadWorksCategory: record.roadWorksCategory,
+            waterWorksCategory: record.waterWorksCategory,
+            electricalSubClasses: record.electricalSubClasses,
+            electricalCategory: record.electricalCategory,
+            mechanicalSubClasses: record.mechanicalSubClasses,
+            mechanicalCategory: record.mechanicalCategory,
+          });
+        }
+        setClassificationLoadedFor(regno);
+      }).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeStep, regno]);
+
+
   const handleProfileChange = (field: keyof FirmProfileData, value: string) => {
     setFirmProfile((prev) => ({ ...prev, [field]: value }));
     if (profileErrors[field]) setProfileErrors((prev) => ({ ...prev, [field]: undefined }));
+  };
+
+  const handleVerifyCompany = async () => {
+    if (!firmProfile.incorporationNo.trim()) return;
+    setVerifying(true);
+    setVerifyMessage(undefined);
+    try {
+      const result = await verifyCompanyRegistration(firmProfile.incorporationNo);
+
+      if (!result.found) {
+        setVerifyMessage({ type: 'error', text: 'This registration number could not be verified with BRS. Please check it and try again.' });
+        return;
+      }
+      if (result.blocked) {
+        setVerifyMessage({ type: 'error', text: 'This company is already registered under another RCIS account. If you believe this is an error, please contact NCA to request access.' });
+        return;
+      }
+      if (result.requiresForeignRegistration) {
+        setVerifyMessage({
+          type: 'warning',
+          text: `This company has ${result.foreignShareholdingPercent}% foreign shareholding and must be registered as a Foreign Contractor, not Local.`,
+        });
+        return;
+      }
+      if (result.existingRegno) {
+        setVerifyMessage({ type: 'info', text: `This company is already registered (${result.existingRegno}). Continuing will let you start a new application for it using your existing details.` });
+      } else {
+        setVerifyMessage({ type: 'info', text: `Verified: ${result.businessName}. Firm details have been pre-filled from BRS.` });
+      }
+
+      setFirmProfile((prev) => ({ ...prev, firmName: result.businessName }));
+      setFirmRegistration((prev) => ({ ...prev, kraPin: result.kraPin }));
+      setPendingBrsDirectors(result.directors);
+    } catch (err) {
+      setVerifyMessage({ type: 'error', text: err instanceof Error ? err.message : 'Could not verify this company. Please try again.' });
+    } finally {
+      setVerifying(false);
+    }
   };
 
   const handleRegistrationChange = (field: keyof FirmRegistrationData, value: string) => {
@@ -453,6 +833,250 @@ export default function ApplicationWizardPage() {
     }
   };
 
+  const handleAddAsset = async (asset: Omit<Asset, 'id'>): Promise<boolean> => {
+    if (!regno) {
+      setAssetsError('Missing application reference — please go back to Step 1 and save again.');
+      return false;
+    }
+    setAssetsSaving(true);
+    setAssetsError('');
+    try {
+      const created = await createAsset({ regno, ...asset });
+      setAssets((prev) => [...prev, toAsset(created)]);
+      return true;
+    } catch (err) {
+      setAssetsError(err instanceof Error ? err.message : 'Could not save this asset. Please try again.');
+      return false;
+    } finally {
+      setAssetsSaving(false);
+    }
+  };
+
+  const handleUpdateAsset = async (id: string, asset: Omit<Asset, 'id'>): Promise<boolean> => {
+    setAssetsSaving(true);
+    setAssetsError('');
+    try {
+      const updated = await updateAsset(id, asset);
+      setAssets((prev) => prev.map((a) => (a.id === id ? toAsset(updated) : a)));
+      return true;
+    } catch (err) {
+      setAssetsError(err instanceof Error ? err.message : 'Could not update this asset. Please try again.');
+      return false;
+    } finally {
+      setAssetsSaving(false);
+    }
+  };
+
+  const handleDeleteAsset = async (id: string): Promise<boolean> => {
+    setAssetsError('');
+    try {
+      await deleteAsset(id);
+      setAssets((prev) => prev.filter((a) => a.id !== id));
+      return true;
+    } catch (err) {
+      setAssetsError(err instanceof Error ? err.message : 'Could not delete this asset. Please try again.');
+      return false;
+    }
+  };
+
+  const handleAddStaff = async (member: Omit<Staff, 'id'>): Promise<boolean> => {
+    if (!regno) {
+      setStaffError('Missing application reference — please go back to Step 1 and save again.');
+      return false;
+    }
+    setStaffSaving(true);
+    setStaffError('');
+    try {
+      const created = await createStaff({ regno, ...member });
+      setStaff((prev) => [...prev, toStaff(created)]);
+      return true;
+    } catch (err) {
+      setStaffError(err instanceof Error ? err.message : 'Could not save this staff member. Please try again.');
+      return false;
+    } finally {
+      setStaffSaving(false);
+    }
+  };
+
+  const handleUpdateStaff = async (id: string, member: Omit<Staff, 'id'>): Promise<boolean> => {
+    setStaffSaving(true);
+    setStaffError('');
+    try {
+      const updated = await updateStaff(id, member);
+      setStaff((prev) => prev.map((s) => (s.id === id ? toStaff(updated) : s)));
+      return true;
+    } catch (err) {
+      setStaffError(err instanceof Error ? err.message : 'Could not update this staff member. Please try again.');
+      return false;
+    } finally {
+      setStaffSaving(false);
+    }
+  };
+
+  const handleDeleteStaff = async (id: string): Promise<boolean> => {
+    setStaffError('');
+    try {
+      await deleteStaff(id);
+      setStaff((prev) => prev.filter((s) => s.id !== id));
+      return true;
+    } catch (err) {
+      setStaffError(err instanceof Error ? err.message : 'Could not delete this staff member. Please try again.');
+      return false;
+    }
+  };
+
+  const handleAddEquipment = async (item: Omit<Equipment, 'id'>): Promise<boolean> => {
+    if (!regno) {
+      setEquipmentError('Missing application reference — please go back to Step 1 and save again.');
+      return false;
+    }
+    setEquipmentSaving(true);
+    setEquipmentError('');
+    try {
+      const created = await createEquipment({ regno, ...item });
+      setEquipment((prev) => [...prev, toEquipment(created)]);
+      return true;
+    } catch (err) {
+      setEquipmentError(err instanceof Error ? err.message : 'Could not save this equipment. Please try again.');
+      return false;
+    } finally {
+      setEquipmentSaving(false);
+    }
+  };
+
+  const handleUpdateEquipment = async (id: string, item: Omit<Equipment, 'id'>): Promise<boolean> => {
+    setEquipmentSaving(true);
+    setEquipmentError('');
+    try {
+      const updated = await updateEquipment(id, item);
+      setEquipment((prev) => prev.map((e) => (e.id === id ? toEquipment(updated) : e)));
+      return true;
+    } catch (err) {
+      setEquipmentError(err instanceof Error ? err.message : 'Could not update this equipment. Please try again.');
+      return false;
+    } finally {
+      setEquipmentSaving(false);
+    }
+  };
+
+  const handleDeleteEquipment = async (id: string): Promise<boolean> => {
+    setEquipmentError('');
+    try {
+      await deleteEquipment(id);
+      setEquipment((prev) => prev.filter((e) => e.id !== id));
+      return true;
+    } catch (err) {
+      setEquipmentError(err instanceof Error ? err.message : 'Could not delete this equipment. Please try again.');
+      return false;
+    }
+  };
+
+  const handleAddProject = async (project: Omit<ProjectExperience, 'id'>): Promise<boolean> => {
+    if (!regno) {
+      setProjectsError('Missing application reference — please go back to Step 1 and save again.');
+      return false;
+    }
+    setProjectsSaving(true);
+    setProjectsError('');
+    try {
+      const created = await createProjectExperience({ regno, ...project });
+      setProjects((prev) => [...prev, toProjectExperience(created)]);
+      return true;
+    } catch (err) {
+      setProjectsError(err instanceof Error ? err.message : 'Could not save this project. Please try again.');
+      return false;
+    } finally {
+      setProjectsSaving(false);
+    }
+  };
+
+  const handleUpdateProject = async (id: string, project: Omit<ProjectExperience, 'id'>): Promise<boolean> => {
+    setProjectsSaving(true);
+    setProjectsError('');
+    try {
+      const updated = await updateProjectExperience(id, project);
+      setProjects((prev) => prev.map((p) => (p.id === id ? toProjectExperience(updated) : p)));
+      return true;
+    } catch (err) {
+      setProjectsError(err instanceof Error ? err.message : 'Could not update this project. Please try again.');
+      return false;
+    } finally {
+      setProjectsSaving(false);
+    }
+  };
+
+  const handleDeleteProject = async (id: string): Promise<boolean> => {
+    setProjectsError('');
+    try {
+      await deleteProjectExperience(id);
+      setProjects((prev) => prev.filter((p) => p.id !== id));
+      return true;
+    } catch (err) {
+      setProjectsError(err instanceof Error ? err.message : 'Could not delete this project. Please try again.');
+      return false;
+    }
+  };
+
+  const handleAddLitigation = async (entry: Omit<Litigation, 'id'>): Promise<boolean> => {
+    if (!regno) {
+      setLitigationError('Missing application reference — please go back to Step 1 and save again.');
+      return false;
+    }
+    setLitigationSaving(true);
+    setLitigationError('');
+    try {
+      const created = await createLitigation({ regno, ...entry });
+      setLitigation((prev) => [...prev, toLitigation(created)]);
+      return true;
+    } catch (err) {
+      setLitigationError(err instanceof Error ? err.message : 'Could not save this entry. Please try again.');
+      return false;
+    } finally {
+      setLitigationSaving(false);
+    }
+  };
+
+  const handleUpdateLitigation = async (id: string, entry: Omit<Litigation, 'id'>): Promise<boolean> => {
+    setLitigationSaving(true);
+    setLitigationError('');
+    try {
+      const updated = await updateLitigation(id, entry);
+      setLitigation((prev) => prev.map((l) => (l.id === id ? toLitigation(updated) : l)));
+      return true;
+    } catch (err) {
+      setLitigationError(err instanceof Error ? err.message : 'Could not update this entry. Please try again.');
+      return false;
+    } finally {
+      setLitigationSaving(false);
+    }
+  };
+
+  const handleDeleteLitigation = async (id: string): Promise<boolean> => {
+    setLitigationError('');
+    try {
+      await deleteLitigation(id);
+      setLitigation((prev) => prev.filter((l) => l.id !== id));
+      return true;
+    } catch (err) {
+      setLitigationError(err instanceof Error ? err.message : 'Could not delete this entry. Please try again.');
+      return false;
+    }
+  };
+
+
+  const handleClassificationChange = (field: keyof ClassificationData, value: string) => {
+    setClassification((prev) => ({ ...prev, [field]: value }));
+    if (classificationErrors[field]) setClassificationErrors((prev) => ({ ...prev, [field]: undefined }));
+  };
+
+  const handleElectricalSubClassesChange = (codes: string[]) => {
+    setClassification((prev) => ({ ...prev, electricalSubClasses: codes }));
+  };
+
+  const handleMechanicalSubClassesChange = (codes: string[]) => {
+    setClassification((prev) => ({ ...prev, mechanicalSubClasses: codes }));
+  };
+
   const handleUploadDocument = async (docType: string, file: File) => {
     if (!regno) {
       setDocumentsError('Missing application reference — please go back to Step 1 and save again.');
@@ -526,6 +1150,30 @@ export default function ApplicationWizardPage() {
     return true;
   };
 
+  const validateClassification = (): boolean => {
+    const next: Partial<Record<keyof ClassificationData, string>> = {};
+    if (!classification.applicationType) next.applicationType = 'Required';
+    setClassificationErrors(next);
+    return Object.keys(next).length === 0;
+  };
+
+  const handleSubmit = async () => {
+    if (!regno) {
+      setSubmitError('Missing application reference — please go back to Step 1 and save again.');
+      return;
+    }
+    setSubmitting(true);
+    setSubmitError('');
+    try {
+      const updated = await submitApplication(regno);
+      setJustSubmittedTrackNo(updated.trackNo);
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Could not submit the application. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const goStep = (index: number) => {
     setActiveStep(index);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -557,6 +1205,7 @@ export default function ApplicationWizardPage() {
     } else {
       const created = await createFirmProfile({ ...firmProfile });
       setRegno(created.regno);
+      
     }
     advance();
   } catch (err) {
@@ -603,7 +1252,25 @@ export default function ApplicationWizardPage() {
       return;
     }
 
-    if (activeStep === 3 && !validateDirectors()) return;
+  if (activeStep === 3 && !validateDirectors()) return;
+
+    if (activeStep === 12) {
+      if (!validateClassification()) return;
+      if (!regno) {
+        setApiError('Missing application reference — please go back to Step 1 and save again.');
+        return;
+      }
+      setSaving(true);
+      try {
+        await upsertClassification({ regno, ...classification });
+        advance();
+      } catch (err) {
+        setApiError(err instanceof Error ? err.message : 'Could not save Classification. Please try again.');
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
 
     advance();
   };
@@ -619,7 +1286,14 @@ export default function ApplicationWizardPage() {
 
   const renderStep = () => {
     if (activeStep === 0) {
-      return <FirmProfileStep data={firmProfile} errors={profileErrors} onChange={handleProfileChange} />;
+      return <FirmProfileStep
+            data={firmProfile}
+            errors={profileErrors}
+            onChange={handleProfileChange}
+            onVerify={handleVerifyCompany}
+            verifying={verifying}
+            verifyMessage={verifyMessage}
+          />;
     }
     if (activeStep === 1) {
       return (
@@ -697,6 +1371,167 @@ export default function ApplicationWizardPage() {
       );
     }
 
+    if (activeStep === 6) {
+      return (
+        <AssetsStep
+          assets={assets}
+          onAdd={handleAddAsset}
+          onUpdate={handleUpdateAsset}
+          onDelete={handleDeleteAsset}
+          error={assetsError}
+          saving={assetsSaving}
+          loading={assetsLoading}
+          documents={documents}
+          documentsLoading={documentsLoading}
+          documentsUploading={documentsUploading}
+          documentsError={documentsError}
+          onUploadDocument={handleUploadDocument}
+          onViewDocument={handleViewDocument}
+          onDeleteDocument={handleDeleteDocument}
+        />
+      );
+    }
+
+    if (activeStep === 7) {
+      return (
+        <StaffStep
+          staff={staff}
+          onAdd={handleAddStaff}
+          onUpdate={handleUpdateStaff}
+          onDelete={handleDeleteStaff}
+          error={staffError}
+          saving={staffSaving}
+          loading={staffLoading}
+          documents={documents}
+          documentsLoading={documentsLoading}
+          documentsUploading={documentsUploading}
+          documentsError={documentsError}
+          onUploadDocument={handleUploadDocument}
+          onViewDocument={handleViewDocument}
+          onDeleteDocument={handleDeleteDocument}
+        />
+      );
+    }
+
+    if (activeStep === 8) {
+      return (
+        <EquipmentStep
+          equipment={equipment}
+          onAdd={handleAddEquipment}
+          onUpdate={handleUpdateEquipment}
+          onDelete={handleDeleteEquipment}
+          error={equipmentError}
+          saving={equipmentSaving}
+          loading={equipmentLoading}
+          documents={documents}
+          documentsLoading={documentsLoading}
+          documentsUploading={documentsUploading}
+          documentsError={documentsError}
+          onUploadDocument={handleUploadDocument}
+          onViewDocument={handleViewDocument}
+          onDeleteDocument={handleDeleteDocument}
+        />
+      );
+    }
+
+    if (activeStep === 9) {
+      return (
+        <ProjectExperienceStep
+          projects={projects}
+          onAdd={handleAddProject}
+          onUpdate={handleUpdateProject}
+          onDelete={handleDeleteProject}
+          error={projectsError}
+          saving={projectsSaving}
+          loading={projectsLoading}
+          documents={documents}
+          documentsLoading={documentsLoading}
+          documentsUploading={documentsUploading}
+          documentsError={documentsError}
+          onUploadDocument={handleUploadDocument}
+          onViewDocument={handleViewDocument}
+          onDeleteDocument={handleDeleteDocument}
+        />
+      );
+    }
+
+    if (activeStep === 10) {
+      return (
+        <LitigationStep
+          litigation={litigation}
+          onAdd={handleAddLitigation}
+          onUpdate={handleUpdateLitigation}
+          onDelete={handleDeleteLitigation}
+          error={litigationError}
+          saving={litigationSaving}
+          loading={litigationLoading}
+          documents={documents}
+          documentsLoading={documentsLoading}
+          documentsUploading={documentsUploading}
+          documentsError={documentsError}
+          onUploadDocument={handleUploadDocument}
+          onViewDocument={handleViewDocument}
+          onDeleteDocument={handleDeleteDocument}
+        />
+      );
+    }
+
+    if (activeStep === 11) {
+      return (
+        <AttachmentsStep
+          documents={documents}
+          documentsLoading={documentsLoading}
+          documentsUploading={documentsUploading}
+          documentsError={documentsError}
+          onUploadDocument={handleUploadDocument}
+          onViewDocument={handleViewDocument}
+          onDeleteDocument={handleDeleteDocument}
+        />
+      );
+    }
+
+
+    if (activeStep === 12) {
+      return (
+        <ClassificationStep
+          data={classification}
+          errors={classificationErrors}
+          onChange={handleClassificationChange}
+          onElectricalSubClassesChange={handleElectricalSubClassesChange}
+          onMechanicalSubClassesChange={handleMechanicalSubClassesChange}
+          onUploadDocument={handleUploadDocument}
+          documentsUploading={documentsUploading}
+        />
+      );
+    }
+
+    if (activeStep === 13) {
+      return (
+        <SummaryStep
+          regno={regno}
+          justSubmittedTrackNo={justSubmittedTrackNo}
+          firmProfile={firmProfile}
+          firmRegistration={firmRegistration}
+          declarations={declarations}
+          directors={directors}
+          offices={offices}
+          referees={referees}
+          assets={assets}
+          staff={staff}
+          equipment={equipment}
+          projects={projects}
+          litigation={litigation}
+          classification={classification}
+          documents={documents}
+          onEditStep={goStep}
+          onViewDocument={handleViewDocument}
+          onSubmit={handleSubmit}
+          submitting={submitting}
+          submitError={submitError}
+        />
+      );
+    }
+
     return (
       <div className="flex flex-col items-center justify-center text-center py-16 text-slate-400">
         <p className="text-sm font-medium text-slate-500">{WIZARD_STEPS[activeStep]}</p>
@@ -735,7 +1570,7 @@ export default function ApplicationWizardPage() {
             </p>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+          <div className="rounded-xl border border-slate-200 bg-white">
             <div className="px-4 sm:px-6 pt-4">
               <button
                 type="button"
@@ -779,24 +1614,26 @@ export default function ApplicationWizardPage() {
                 Previous
               </button>
 
-              <div className="flex items-center gap-3">
-                {savedLabel && !saving && (
-                  <span className="hidden sm:flex items-center gap-1 text-xs text-emerald-600">
-                    <Save size={13} />
-                    {savedLabel}
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={handleNext}
-                  disabled={isLastStep || saving}
-                  className="flex items-center gap-1 rounded-md text-white text-sm px-5 py-2 disabled:opacity-50"
-                  style={{ backgroundColor: 'var(--rcis-accent)' }}
-                >
-                  {saving ? 'Saving...' : 'Save and continue'}
-                  {!saving && <ChevronRight size={15} />}
-                </button>
-              </div>
+              {!isLastStep && (
+                <div className="flex items-center gap-3">
+                  {savedLabel && !saving && (
+                    <span className="hidden sm:flex items-center gap-1 text-xs text-emerald-600">
+                      <Save size={13} />
+                      {savedLabel}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleNext}
+                    disabled={saving}
+                    className="flex items-center gap-1 rounded-md text-white text-sm px-5 py-2 disabled:opacity-50"
+                    style={{ backgroundColor: 'var(--rcis-accent)' }}
+                  >
+                    {saving ? 'Saving...' : 'Save and continue'}
+                    {!saving && <ChevronRight size={15} />}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </main>

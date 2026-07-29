@@ -5,9 +5,12 @@ interface FirmProfileStepProps {
   data: FirmProfileData;
   errors: Partial<Record<keyof FirmProfileData, string>>;
   onChange: (field: keyof FirmProfileData, value: string) => void;
+  onVerify: () => void;
+  verifying: boolean;
+  verifyMessage?: { type: 'error' | 'warning' | 'info'; text: string };
 }
 
-export default function FirmProfileStep({ data, errors, onChange }: FirmProfileStepProps) {
+export default function FirmProfileStep({ data, errors, onChange, onVerify, verifying, verifyMessage }: FirmProfileStepProps) {
   return (
     <div className="space-y-5">
       <div>
@@ -25,13 +28,27 @@ export default function FirmProfileStep({ data, errors, onChange }: FirmProfileS
             />
             <button
               type="button"
-              className="px-3 rounded-md text-white text-xs font-medium shrink-0"
+              onClick={onVerify}
+              disabled={verifying || !data.incorporationNo.trim()}
+              className="px-3 rounded-md text-white text-xs font-medium shrink-0 disabled:opacity-60"
               style={{ backgroundColor: 'var(--rcis-accent)' }}
             >
-              Verify
+              {verifying ? 'Verifying...' : 'Verify'}
             </button>
           </div>
         </Field>
+
+        {verifyMessage && (
+          <div
+            className={`sm:col-span-3 rounded-md px-3 py-2 text-xs ${
+              verifyMessage.type === 'error' ? 'bg-red-50 border border-red-200 text-red-700'
+              : verifyMessage.type === 'warning' ? 'bg-amber-50 border border-amber-200 text-amber-700'
+              : 'bg-blue-50 border border-blue-200 text-blue-700'
+            }`}
+          >
+            {verifyMessage.text}
+          </div>
+        )}
 
         <Field label="Firm Name" error={errors.firmName}>
           <input

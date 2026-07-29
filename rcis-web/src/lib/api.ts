@@ -432,3 +432,338 @@ export function deleteReferee(id: string) {
     method: 'DELETE',
   }, true);
 }
+
+export interface ContractorAssetRecord {
+  id: string;
+  regno: string;
+  description: string;
+  registrationNo: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateAssetPayload {
+  regno: string;
+  description: string;
+  registrationNo: string;
+}
+
+export type UpdateAssetPayload = Partial<Omit<CreateAssetPayload, 'regno'>>;
+
+export function listAssets(regno: string) {
+  return request<ContractorAssetRecord[]>(`/contractor-applications/assets?regno=${encodeURIComponent(regno)}`, {
+    method: 'GET',
+  }, true);
+}
+
+export function createAsset(payload: CreateAssetPayload) {
+  return request<ContractorAssetRecord>('/contractor-applications/assets', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, true);
+}
+
+export function updateAsset(id: string, payload: UpdateAssetPayload) {
+  return request<ContractorAssetRecord>(`/contractor-applications/assets/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  }, true);
+}
+
+export function deleteAsset(id: string) {
+  return request<{ success: boolean }>(`/contractor-applications/assets/${id}`, {
+    method: 'DELETE',
+  }, true);
+}
+
+export interface ContractorStaffRecord {
+  id: string;
+  regno: string;
+  fullNames: string;
+  idNo: string;
+  nationality: string;
+  highestQualification: string;
+  yearsOfExperience: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateStaffPayload {
+  regno: string;
+  fullNames: string;
+  idNo: string;
+  nationality: string;
+  highestQualification: string;
+  yearsOfExperience: string;
+}
+
+export type UpdateStaffPayload = Partial<Omit<CreateStaffPayload, 'regno'>>;
+
+export function listStaff(regno: string) {
+  return request<ContractorStaffRecord[]>(`/contractor-applications/staff?regno=${encodeURIComponent(regno)}`, {
+    method: 'GET',
+  }, true);
+}
+
+export function createStaff(payload: CreateStaffPayload) {
+  return request<ContractorStaffRecord>('/contractor-applications/staff', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, true);
+}
+
+export function updateStaff(id: string, payload: UpdateStaffPayload) {
+  return request<ContractorStaffRecord>(`/contractor-applications/staff/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  }, true);
+}
+
+export function deleteStaff(id: string) {
+  return request<{ success: boolean }>(`/contractor-applications/staff/${id}`, {
+    method: 'DELETE',
+  }, true);
+}
+
+export interface ContractorEquipmentRecord {
+  id: string;
+  regno: string;
+  name: string;
+  ownedOrLeased: string;
+  typeMakeModel: string;
+  category: string;
+  registrationNo: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateEquipmentPayload {
+  regno: string;
+  name: string;
+  ownedOrLeased: string;
+  typeMakeModel: string;
+  category: string;
+  registrationNo: string;
+}
+
+export type UpdateEquipmentPayload = Partial<Omit<CreateEquipmentPayload, 'regno'>>;
+
+export function listEquipment(regno: string) {
+  return request<ContractorEquipmentRecord[]>(`/contractor-applications/equipment?regno=${encodeURIComponent(regno)}`, {
+    method: 'GET',
+  }, true);
+}
+
+export function createEquipment(payload: CreateEquipmentPayload) {
+  return request<ContractorEquipmentRecord>('/contractor-applications/equipment', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, true);
+}
+
+export function updateEquipment(id: string, payload: UpdateEquipmentPayload) {
+  return request<ContractorEquipmentRecord>(`/contractor-applications/equipment/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  }, true);
+}
+
+export function deleteEquipment(id: string) {
+  return request<{ success: boolean }>(`/contractor-applications/equipment/${id}`, {
+    method: 'DELETE',
+  }, true);
+}
+
+export interface ContractorProjectExperienceRecord {
+  id: string;
+  regno: string;
+  project: string;
+  ncaProjectRegNo: string;
+  contractSum: string;
+  contractPeriod: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateProjectExperiencePayload {
+  regno: string;
+  project: string;
+  ncaProjectRegNo: string;
+  contractSum: string;
+  contractPeriod: string;
+}
+
+export type UpdateProjectExperiencePayload = Partial<Omit<CreateProjectExperiencePayload, 'regno'>>;
+
+export function listProjectExperience(regno: string) {
+  return request<ContractorProjectExperienceRecord[]>(`/contractor-applications/project-experience?regno=${encodeURIComponent(regno)}`, {
+    method: 'GET',
+  }, true);
+}
+
+export function createProjectExperience(payload: CreateProjectExperiencePayload) {
+  return request<ContractorProjectExperienceRecord>('/contractor-applications/project-experience', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, true);
+}
+
+export function updateProjectExperience(id: string, payload: UpdateProjectExperiencePayload) {
+  return request<ContractorProjectExperienceRecord>(`/contractor-applications/project-experience/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  }, true);
+}
+
+export function deleteProjectExperience(id: string) {
+  return request<{ success: boolean }>(`/contractor-applications/project-experience/${id}`, {
+    method: 'DELETE',
+  }, true);
+}
+
+export interface ContractorLitigationRecord {
+  id: string;
+  regno: string;
+  refNo: string;
+  date: string;
+  partiesInvolved: string;
+  particularOfLitigation: string;
+  statusOfMatter: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateLitigationPayload {
+  regno: string;
+  refNo: string;
+  date: string;
+  partiesInvolved: string;
+  particularOfLitigation: string;
+  statusOfMatter: string;
+}
+
+export type UpdateLitigationPayload = Partial<Omit<CreateLitigationPayload, 'regno'>>;
+
+export function listLitigation(regno: string) {
+  return request<ContractorLitigationRecord[]>(`/contractor-applications/litigation?regno=${encodeURIComponent(regno)}`, {
+    method: 'GET',
+  }, true);
+}
+
+export function createLitigation(payload: CreateLitigationPayload) {
+  return request<ContractorLitigationRecord>('/contractor-applications/litigation', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, true);
+}
+
+export function updateLitigation(id: string, payload: UpdateLitigationPayload) {
+  return request<ContractorLitigationRecord>(`/contractor-applications/litigation/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  }, true);
+}
+
+export function deleteLitigation(id: string) {
+  return request<{ success: boolean }>(`/contractor-applications/litigation/${id}`, {
+    method: 'DELETE',
+  }, true);
+}
+
+export interface ContractorClassificationRecord {
+  regno: string;
+  applicationType: string;
+  buildingWorksCategory: string;
+  roadWorksCategory: string;
+  waterWorksCategory: string;
+  electricalSubClasses: string[];
+  electricalCategory: string;
+  mechanicalSubClasses: string[];
+  mechanicalCategory: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpsertClassificationPayload {
+  regno: string;
+  applicationType: string;
+  buildingWorksCategory: string;
+  roadWorksCategory: string;
+  waterWorksCategory: string;
+  electricalSubClasses: string[];
+  electricalCategory: string;
+  mechanicalSubClasses: string[];
+  mechanicalCategory: string;
+}
+
+export function getClassification(regno: string) {
+  return request<ContractorClassificationRecord | null>(`/contractor-applications/classification?regno=${encodeURIComponent(regno)}`, {
+    method: 'GET',
+  }, true);
+}
+
+export function upsertClassification(payload: UpsertClassificationPayload) {
+  return request<ContractorClassificationRecord>('/contractor-applications/classification', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  }, true);
+}
+
+export interface ContractorApplicationRecord {
+  id: string;
+  regno: string;
+  trackNo: string;
+  companyName: string | null;
+  classesApplied: string;
+  applicationType: string;
+  localForeign: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function submitApplication(regno: string) {
+  return request<ContractorApplicationRecord>('/contractor-applications/submit', {
+    method: 'PATCH',
+    body: JSON.stringify({ regno }),
+  }, true);
+}
+
+export function listMySubmissions() {
+  return request<ContractorApplicationRecord[]>('/contractor-applications/my-submissions', {
+    method: 'GET',
+  }, true);
+}
+export interface BrsDirector {
+  fullNames: string;
+  idNo: string;
+  nationality: string;
+  percentageShare: string;
+}
+
+export type BrsVerificationResponse =
+  | { found: false }
+  | { found: true; blocked: true }
+  | {
+      found: true;
+      blocked: false;
+      requiresForeignRegistration: boolean;
+      verified: boolean;
+      businessName: string;
+      kraPin: string;
+      registrationDate: string;
+      directors: BrsDirector[];
+      foreignShareholdingPercent: number;
+      existingRegno: string | null;
+    };
+
+export function verifyCompanyRegistration(registrationNumber: string) {
+  return request<BrsVerificationResponse>(`/contractor-applications/verify-company?registrationNumber=${encodeURIComponent(registrationNumber)}`, {
+    method: 'GET',
+  }, true);
+}
+export function getSubmission(id: string) {
+  return request<ContractorApplicationRecord>(`/contractor-applications/submissions/${id}`, {
+    method: 'GET',
+  }, true);
+}

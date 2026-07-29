@@ -36,6 +36,13 @@ export const MODE_LABELS: Record<WizardMode, { title: string; subtitle: string }
   },
 };
 
+export const MODE_TO_APPLICATION_TYPE: Record<WizardMode, string> = {
+  new: 'New Application',
+  renewal: 'Renewal',
+  upgrade: 'Upgrade',
+  downgrade: 'Downgrade',
+};
+
 export function resolveMode(param: string | null): WizardMode {
   if (param === 'renewal' || param === 'upgrade' || param === 'downgrade') return param;
   return 'new';

@@ -7,22 +7,25 @@ import ServiceCard from '@/components/ServiceCard';
 import ServicePanel from '@/components/ServicePanel';
 import ApplicationsTable from '@/components/ApplicationsTable';
 import { SERVICE_CARDS } from '@/lib/nav-config';
-import { listMyApplications, type ContractorCompany } from '@/lib/api';
+import { listMyApplications, listMySubmissions, type ContractorCompany, type ContractorApplicationRecord } from '@/lib/api';
 
 export default function DashboardPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeCard, setActiveCard] = useState<string | null>(null);
 
-  const [applications, setApplications] = useState<ContractorCompany[]>([]);
+  const [companies, setCompanies] = useState<ContractorCompany[]>([]);
+  const [submissions, setSubmissions] = useState<ContractorApplicationRecord[]>([]);
   const [loadingApps, setLoadingApps] = useState(true);
   const [appsError, setAppsError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
     setLoadingApps(true);
-    listMyApplications()
-      .then((data) => {
-        if (!cancelled) setApplications(data);
+    Promise.all([listMyApplications(), listMySubmissions()])
+      .then(([companyRecords, submissionRecords]) => {
+        if (cancelled) return;
+        setCompanies(companyRecords);
+        setSubmissions(submissionRecords);
       })
       .catch((err) => {
         if (!cancelled) setAppsError(err instanceof Error ? err.message : 'Could not load your applications.');
@@ -35,9 +38,11 @@ export default function DashboardPage() {
 
   const active = SERVICE_CARDS.find((c) => c.key === activeCard && c.panelLinks);
 
-  // Most recently updated DRAFT application, if any - the one "Continue
-  // with your application" resumes.
-  const inProgress = applications.find((a) => a.status === 'DRAFT');
+  // A company counts as "in progress" only if it has never actually
+  // completed a submission yet - once at least one ContractorApplication
+  // exists for it, it's an established company, not an unfinished draft.
+  const submittedRegnos = new Set(submissions.map((s) => s.regno));
+  const inProgress = companies.find((c) => !submittedRegnos.has(c.regno));
 
   return (
     <div className="min-h-screen bg-[var(--rcis-sand)]">
@@ -98,7 +103,7 @@ export default function DashboardPage() {
           </section>
 
           <section>
-            <ApplicationsTable applications={applications} loading={loadingApps} error={appsError} />
+            <ApplicationsTable applications={submissions} loading={loadingApps} error={appsError} />
           </section>
         </main>
       </div>
