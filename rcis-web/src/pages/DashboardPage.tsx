@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowRight } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { ArrowRight, CheckCircle2, X } from 'lucide-react';
 import TopNav from '@/components/TopNav';
 import Sidebar from '@/components/Sidebar';
 import ServiceCard from '@/components/ServiceCard';
@@ -10,8 +10,24 @@ import { SERVICE_CARDS } from '@/lib/nav-config';
 import { listMyApplications, listMySubmissions, type ContractorCompany, type ContractorApplicationRecord } from '@/lib/api';
 
 export default function DashboardPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeCard, setActiveCard] = useState<string | null>(null);
+
+  // The wizard redirects here after a submit (or when someone tries to
+  // re-open an already-submitted application) with a one-off message in
+  // route state. Read it once, then clear it from history so a refresh or
+  // back-navigation doesn't show it again.
+  const [notice, setNotice] = useState<string | null>(
+    (location.state as { notice?: string } | null)?.notice ?? null,
+  );
+
+  useEffect(() => {
+    if (!notice) return;
+    navigate(location.pathname, { replace: true, state: {} });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [companies, setCompanies] = useState<ContractorCompany[]>([]);
   const [submissions, setSubmissions] = useState<ContractorApplicationRecord[]>([]);
@@ -56,6 +72,23 @@ export default function DashboardPage() {
               Manage your contractor registration, renewals, and certificates.
             </p>
           </div>
+
+          {notice && (
+            <div className="flex items-start justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+              <div className="flex items-start gap-2">
+                <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-emerald-600" />
+                <span>{notice}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setNotice(null)}
+                aria-label="Dismiss"
+                className="shrink-0 text-emerald-600 hover:text-emerald-800"
+              >
+                <X size={15} />
+              </button>
+            </div>
+          )}
 
           {inProgress && (
             <Link

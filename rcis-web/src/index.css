@@ -5,6 +5,7 @@
   --rcis-primary: #33b5e5;      /* header/sidebar blue */
   --rcis-primary-dark: #2593bd; /* hover/pressed state */
   --rcis-accent: #f39c12;       /* orange accent — headings, underline, upgrade icon */
+  --rcis-accent-dark: #b3690e;  /* darker orange for text on light-orange fills */
   --rcis-sand: #ffffff; 
   --rcis-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;      /* page background */
 }

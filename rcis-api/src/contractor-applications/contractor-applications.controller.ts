@@ -51,6 +51,15 @@ verifyCompany(@CurrentUser() user: { userId: string }, @Query('registrationNumbe
   return this.service.verifyCompanyRegistration(user.userId, registrationNumber);
 }
 
+@Get('brs-director')
+lookupBrsDirector(
+  @CurrentUser() user: { userId: string },
+  @Query('regno') regno: string,
+  @Query('idNo') idNo: string,
+) {
+  return this.service.lookupBrsDirector(user.userId, regno, idNo);
+}
+
   @Post()
   createFirmProfile(@CurrentUser() user: { userId: string }, @Body() dto: CreateFirmProfileDto) {
     return this.service.createFirmProfile(user.userId, dto);

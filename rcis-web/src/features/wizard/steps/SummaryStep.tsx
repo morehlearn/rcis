@@ -4,7 +4,7 @@ import type {
   FirmProfileData, FirmRegistrationData, DeclarationsData, Director, Office, Referee,
   Asset, Staff, Equipment, ProjectExperience, Litigation, ClassificationData,
 } from '../wizard-types';
-import { ELECTRICAL_SUBCLASSES, MECHANICAL_SUBCLASSES } from '../wizard-types';
+import { ELECTRICAL_SUBCLASSES, MECHANICAL_SUBCLASSES, DECLARATION_ITEMS } from '../wizard-types';
 import type { ContractorDocumentRecord } from '@/lib/api';
 
 interface SummaryStepProps {
@@ -13,6 +13,9 @@ interface SummaryStepProps {
   firmProfile: FirmProfileData;
   firmRegistration: FirmRegistrationData;
   declarations: DeclarationsData;
+  declarationsErrors: Partial<Record<keyof DeclarationsData, string>>;
+  onDeclarationsChange: (field: keyof DeclarationsData, value: boolean) => void;
+  validateDeclarations: () => boolean;
   directors: Director[];
   offices: Office[];
   referees: Referee[];
@@ -39,31 +42,38 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-100">
-        <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wide">{title}</h4>
+    <div className="rounded-lg overflow-hidden border border-slate-200">
+      <div
+        className="flex items-center justify-between px-4 py-2.5"
+        style={{ backgroundColor: 'rgba(243, 156, 18, 0.05)', borderBottom: '1px solid rgba(243, 156, 18, 0.18)' }}
+      >
+        <h4 className="text-xs font-bold uppercase tracking-wide" style={{ color: 'var(--rcis-accent-dark)' }}>
+          {title}
+        </h4>
         <button
           type="button"
           onClick={() => onEditStep(stepIndex)}
-          className="inline-flex items-center gap-1 text-xs font-medium hover:underline"
-          style={{ color: 'var(--rcis-primary)' }}
+          className="inline-flex items-center gap-1 text-xs font-semibold hover:underline"
+          style={{ color: 'var(--rcis-primary-dark)' }}
         >
           <Pencil size={11} />
           Edit
         </button>
       </div>
-      <div className="p-4 text-sm">{children}</div>
+      <div className="p-4 text-sm bg-white">{children}</div>
     </div>
   );
 }
 
 function KeyValueGrid({ rows }: { rows: [string, string | undefined | null][] }) {
   return (
-    <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2">
+    <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3">
       {rows.map(([label, value]) => (
         <div key={label}>
-          <div className="text-[11px] text-slate-400 uppercase tracking-wide">{label}</div>
-          <div className="text-slate-700">{value || '—'}</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--rcis-primary-dark)' }}>
+            {label}
+          </div>
+          <div className="text-slate-800">{value || '—'}</div>
         </div>
       ))}
     </div>
@@ -76,14 +86,22 @@ function MiniTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
     <div className="overflow-x-auto">
       <table className="w-full text-left text-xs min-w-[400px]">
         <thead>
-          <tr className="text-slate-500 uppercase tracking-wide">
-            {headers.map((h) => <th key={h} className="pr-4 py-1 font-medium">{h}</th>)}
+          <tr style={{ backgroundColor: 'rgba(51, 181, 229, 0.08)' }}>
+            {headers.map((h) => (
+              <th
+                key={h}
+                className="pr-4 py-1.5 font-semibold uppercase tracking-wide"
+                style={{ color: 'var(--rcis-primary-dark)' }}
+              >
+                {h}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
           {rows.map((row, i) => (
             <tr key={i} className="border-t border-slate-100">
-              {row.map((cell, j) => <td key={j} className="pr-4 py-1.5 text-slate-700">{cell}</td>)}
+              {row.map((cell, j) => <td key={j} className="pr-4 py-1.5 text-slate-800">{cell}</td>)}
             </tr>
           ))}
         </tbody>
@@ -93,7 +111,8 @@ function MiniTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
 }
 
 export default function SummaryStep({
-  regno, justSubmittedTrackNo, firmProfile, firmRegistration, declarations,
+  justSubmittedTrackNo, firmProfile, firmRegistration,
+  declarations, declarationsErrors, onDeclarationsChange, validateDeclarations,
   directors, offices, referees, assets, staff, equipment, projects, litigation,
   classification, documents, onEditStep, onViewDocument, onSubmit, submitting, submitError,
 }: SummaryStepProps) {
@@ -104,6 +123,11 @@ export default function SummaryStep({
     setOpeningId(id);
     await onViewDocument(id);
     setOpeningId(null);
+  };
+
+  const handleProceedToConfirm = () => {
+    if (!validateDeclarations()) return;
+    setConfirming(true);
   };
 
   if (justSubmittedTrackNo) {
@@ -128,7 +152,7 @@ export default function SummaryStep({
         </p>
       </div>
 
-      <Section title="Firm Profile" stepIndex={0} onEditStep={onEditStep}>
+      <Section title="Company Details" stepIndex={0} onEditStep={onEditStep}>
         <KeyValueGrid rows={[
           ['Firm Name', firmProfile.firmName],
           ['Incorporation No.', firmProfile.incorporationNo],
@@ -139,11 +163,6 @@ export default function SummaryStep({
           ['Telephone', firmProfile.telephone],
           ['Cell Phone', firmProfile.cellPhone],
           ['Email', firmProfile.email],
-        ]} />
-      </Section>
-
-      <Section title="Firm Registration" stepIndex={1} onEditStep={onEditStep}>
-        <KeyValueGrid rows={[
           ['Firm Type', firmRegistration.firmType],
           ['KRA PIN', firmRegistration.kraPin],
           ['Bank Name', firmRegistration.bankName],
@@ -153,80 +172,73 @@ export default function SummaryStep({
         ]} />
       </Section>
 
-      <Section title="Declarations" stepIndex={2} onEditStep={onEditStep}>
-        <KeyValueGrid rows={[
-          ['Code of Conduct Accepted', declarations.acceptCodeOfConduct ? 'Yes' : 'No'],
-          ['Terms and Conditions Accepted', declarations.acceptTerms ? 'Yes' : 'No'],
-        ]} />
-      </Section>
-
-      <Section title="Directors" stepIndex={3} onEditStep={onEditStep}>
+      <Section title="Directors" stepIndex={1} onEditStep={onEditStep}>
         <MiniTable
           headers={['Full Names', 'ID No', 'Nationality', 'Qualification', '% Share']}
           rows={directors.map((d) => [d.fullNames, d.idNo, d.nationality, d.highestQualification, d.percentageShare])}
         />
       </Section>
 
-      <Section title="Offices" stepIndex={4} onEditStep={onEditStep}>
-        <MiniTable
-          headers={['Town', 'Address', 'Location']}
-          rows={offices.map((o) => [o.town, o.address, o.location])}
-        />
-      </Section>
-
-      <Section title="Referees" stepIndex={5} onEditStep={onEditStep}>
+      <Section title="Referees" stepIndex={1} onEditStep={onEditStep}>
         <MiniTable
           headers={['Name', 'Telephone', 'Profession']}
           rows={referees.map((r) => [r.name, r.telephone, r.profession])}
         />
       </Section>
 
-      <Section title="Assets" stepIndex={6} onEditStep={onEditStep}>
-        <MiniTable
-          headers={['Description', 'Registration No']}
-          rows={assets.map((a) => [a.description, a.registrationNo])}
-        />
-      </Section>
-
-      <Section title="Staff" stepIndex={7} onEditStep={onEditStep}>
+      <Section title="Staff" stepIndex={1} onEditStep={onEditStep}>
         <MiniTable
           headers={['Full Names', 'Nationality', 'Qualification', 'Yrs Exp.']}
           rows={staff.map((s) => [s.fullNames, s.nationality, s.highestQualification, s.yearsOfExperience])}
         />
       </Section>
 
-      <Section title="Equipment & Plant" stepIndex={8} onEditStep={onEditStep}>
+      <Section title="Offices" stepIndex={2} onEditStep={onEditStep}>
+        <MiniTable
+          headers={['Town', 'Address', 'Location']}
+          rows={offices.map((o) => [o.town, o.address, o.location])}
+        />
+      </Section>
+
+      <Section title="Fixed Assets" stepIndex={2} onEditStep={onEditStep}>
+        <MiniTable
+          headers={['Description', 'Registration No']}
+          rows={assets.map((a) => [a.description, a.registrationNo])}
+        />
+      </Section>
+
+      <Section title="Equipment & Plant" stepIndex={2} onEditStep={onEditStep}>
         <MiniTable
           headers={['Name', 'Owned/Leased', 'Category']}
           rows={equipment.map((e) => [e.name, e.ownedOrLeased, e.category])}
         />
       </Section>
 
-      <Section title="Project Experience" stepIndex={9} onEditStep={onEditStep}>
+      <Section title="Project Experience" stepIndex={3} onEditStep={onEditStep}>
         <MiniTable
           headers={['Project', 'Contract Sum', 'Period']}
           rows={projects.map((p) => [p.project, p.contractSum, p.contractPeriod])}
         />
       </Section>
 
-      <Section title="Litigation History" stepIndex={10} onEditStep={onEditStep}>
+      <Section title="Litigation History" stepIndex={3} onEditStep={onEditStep}>
         <MiniTable
           headers={['Ref No', 'Parties Involved', 'Status']}
           rows={litigation.map((l) => [l.refNo, l.partiesInvolved, l.statusOfMatter])}
         />
       </Section>
 
-      <Section title="Attachments" stepIndex={11} onEditStep={onEditStep}>
+      <Section title="Attachments" stepIndex={4} onEditStep={onEditStep}>
         {documents.length === 0 ? (
           <p className="text-xs text-slate-400">No documents uploaded.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs min-w-[400px]">
               <thead>
-                <tr className="text-slate-500 uppercase tracking-wide">
-                  <th className="pr-4 py-1 font-medium">File Name</th>
-                  <th className="pr-4 py-1 font-medium">Document Type</th>
-                  <th className="pr-4 py-1 font-medium">Uploaded</th>
+                <tr style={{ backgroundColor: 'rgba(51, 181, 229, 0.08)' }}>
+                  <th className="pr-4 py-1.5 font-semibold uppercase tracking-wide" style={{ color: 'var(--rcis-primary-dark)' }}>File Name</th>
+                  <th className="pr-4 py-1.5 font-semibold uppercase tracking-wide" style={{ color: 'var(--rcis-primary-dark)' }}>Document Type</th>
+                  <th className="pr-4 py-1.5 font-semibold uppercase tracking-wide" style={{ color: 'var(--rcis-primary-dark)' }}>Uploaded</th>
                 </tr>
               </thead>
               <tbody>
@@ -244,7 +256,7 @@ export default function SummaryStep({
                         <ExternalLink size={10} />
                       </button>
                     </td>
-                    <td className="pr-4 py-1.5 text-slate-700">{doc.docType}</td>
+                    <td className="pr-4 py-1.5 text-slate-800">{doc.docType}</td>
                     <td className="pr-4 py-1.5 text-slate-600">
                       {new Date(doc.uploadedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
                     </td>
@@ -256,7 +268,7 @@ export default function SummaryStep({
         )}
       </Section>
 
-      <Section title="Classification" stepIndex={12} onEditStep={onEditStep}>
+      <Section title="Classification" stepIndex={4} onEditStep={onEditStep}>
         <KeyValueGrid rows={[
           ['Application Type', classification.applicationType],
           ['Building Works Category', classification.buildingWorksCategory],
@@ -268,7 +280,7 @@ export default function SummaryStep({
 
         <div className="mt-4 grid sm:grid-cols-2 gap-x-6 gap-y-3">
           <div>
-            <div className="text-[11px] text-slate-400 uppercase tracking-wide mb-1">Electrical Sub-Classes</div>
+            <div className="text-[11px] font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--rcis-primary-dark)' }}>Electrical Sub-Classes</div>
             {classification.electricalSubClasses.length === 0 ? (
               <p className="text-slate-500 text-xs">None selected</p>
             ) : (
@@ -280,7 +292,7 @@ export default function SummaryStep({
             )}
           </div>
           <div>
-            <div className="text-[11px] text-slate-400 uppercase tracking-wide mb-1">Mechanical Sub-Classes</div>
+            <div className="text-[11px] font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--rcis-primary-dark)' }}>Mechanical Sub-Classes</div>
             {classification.mechanicalSubClasses.length === 0 ? (
               <p className="text-slate-500 text-xs">None selected</p>
             ) : (
@@ -300,11 +312,54 @@ export default function SummaryStep({
         </div>
       )}
 
-      <div className="rounded-lg border border-slate-200 p-4">
+      <div className="rounded-lg border border-slate-200 p-4 space-y-5">
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold" style={{ color: 'var(--rcis-primary)' }}>
+            Declarations
+          </h3>
+          <label className="flex items-start gap-2 pt-1 cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={declarations.acceptCodeOfConduct}
+              onChange={(e) => onDeclarationsChange('acceptCodeOfConduct', e.target.checked)}
+            />
+            <span className="text-sm text-slate-700">
+              <span className="font-medium text-red-600">Accept Code of Conduct</span>
+              <br />
+              I confirm to have downloaded and read this Code of Conduct for the Construction Industry
+            </span>
+          </label>
+          {declarationsErrors.acceptCodeOfConduct && (
+            <p className="text-[11px] text-red-600">{declarationsErrors.acceptCodeOfConduct}</p>
+          )}
+
+          <div className="border-t border-slate-100 pt-3">
+            <ol className="list-decimal list-outside pl-5 space-y-1.5 text-xs text-slate-600">
+              {DECLARATION_ITEMS.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ol>
+          </div>
+
+          <label className="flex items-start gap-2 pt-2 cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={declarations.acceptTerms}
+              onChange={(e) => onDeclarationsChange('acceptTerms', e.target.checked)}
+            />
+            <span className="text-sm font-medium text-red-600">Accept Terms and Conditions</span>
+          </label>
+          {declarationsErrors.acceptTerms && (
+            <p className="text-[11px] text-red-600">{declarationsErrors.acceptTerms}</p>
+          )}
+        </div>
+
         {!confirming ? (
           <button
             type="button"
-            onClick={() => setConfirming(true)}
+            onClick={handleProceedToConfirm}
             className="px-5 py-2.5 rounded-md text-white text-sm font-semibold"
             style={{ backgroundColor: 'var(--rcis-accent)' }}
           >

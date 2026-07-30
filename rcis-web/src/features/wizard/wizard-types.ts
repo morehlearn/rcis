@@ -46,7 +46,6 @@ export const TOWNS = [
 
 export interface FirmRegistrationData {
   firmType: string;
-  incorporationNo: string;
   kraPin: string;
   registeredCapital: string;
   paidUpCapital: string;
@@ -68,7 +67,6 @@ export interface FirmRegistrationData {
 
 export const emptyFirmRegistration: FirmRegistrationData = {
   firmType: 'Company',
-  incorporationNo: '',
   kraPin: '',
   registeredCapital: '',
   paidUpCapital: '',
@@ -339,7 +337,7 @@ export const emptyLitigationDraft: Omit<Litigation, 'id'> = {
 
 // --- Step 13: Classification ---
 
-export const APPLICATION_TYPES = ['New Application', 'Renewal', 'Upgrade', 'Downgrade'];
+export const APPLICATION_TYPES = ['New Application', 'Renewal', 'Upgrade', 'Downgrade', 'Additional Certificate'];
 
 export const NCA_CATEGORIES = ['NCA1', 'NCA2', 'NCA3', 'NCA4', 'NCA5', 'NCA6', 'NCA7', 'NCA8'];
 

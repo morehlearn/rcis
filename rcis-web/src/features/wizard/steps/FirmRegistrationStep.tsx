@@ -63,14 +63,6 @@ export default function FirmRegistrationStep({ data, errors, onChange, onCategor
             </select>
           </Field>
 
-          <Field label="Incorporation Certificate / Business No." required error={errors.incorporationNo}>
-            <input
-              className={inputCls(errors.incorporationNo)}
-              value={data.incorporationNo}
-              onChange={(e) => onChange('incorporationNo', e.target.value)}
-            />
-          </Field>
-
           <Field label="Company KRA PIN Number." required error={errors.kraPin}>
             <input
               className={inputCls(errors.kraPin)}

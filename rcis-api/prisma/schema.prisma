@@ -41,12 +41,36 @@ enum ApplicationStatus {
   REJECTED
 }
 
-// Tracks the next sequence number per year, so regno generation is
-// race-safe under concurrent requests (increment happens inside a
-// transaction, not by scanning existing rows for the current max).
+
 model RegnoCounter {
   year  Int @id
   count Int @default(0)
+}
+
+
+model BrsCompanyRecord {
+  id                         String   @id @default(uuid())
+  registrationNumber         String   @unique
+  businessName               String
+  kraPin                     String
+  registrationDate           String
+  foreignShareholdingPercent Int
+  fetchedAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+  directors                  BrsDirectorRecord[]
+}
+
+model BrsDirectorRecord {
+  id              String   @id @default(uuid())
+  companyRecordId String
+  companyRecord   BrsCompanyRecord @relation(fields: [companyRecordId], references: [id], onDelete: Cascade)
+  idNo            String
+  fullNames       String
+  nationality     String
+  percentageShare String
+  createdAt       DateTime @default(now())
+
+  @@unique([companyRecordId, idNo])
 }
 
 model ContractorCompany {
@@ -104,7 +128,7 @@ model ContractorCompany {
   acceptCodeOfConduct Boolean @default(false)
   acceptTerms         Boolean @default(false)
 
-  status    ApplicationStatus @default(DRAFT)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

@@ -1,11 +1,15 @@
 import { useState } from 'react';
-import { Pencil, Trash2, Upload, ExternalLink } from 'lucide-react';
+import { Pencil, Trash2, Upload, ExternalLink, CheckCircle2 } from 'lucide-react';
 import { Field, inputCls } from '../Field';
 import {
-  type Director, emptyDirectorDraft, NATIONALITIES, QUALIFICATIONS, PROFESSIONS,
+  type Director, emptyDirectorDraft, QUALIFICATIONS, PROFESSIONS,
 } from '../wizard-types';
 
 type DirectorFileField = 'cv' | 'academicCert';
+
+type BrsLookupResult =
+  | { found: false }
+  | { found: true; fullNames: string; nationality: string; percentageShare: string };
 
 interface DirectorsStepProps {
   directors: Director[];
@@ -14,19 +18,30 @@ interface DirectorsStepProps {
   onDelete: (id: string) => Promise<boolean>;
   onUploadFile: (directorId: string, field: DirectorFileField, file: File) => Promise<void>;
   onViewFile: (directorId: string, field: DirectorFileField) => Promise<void>;
+  onLookupDirector: (idNo: string) => Promise<BrsLookupResult>;
   error?: string;
   saving?: boolean;
   loading?: boolean;
 }
 
 export default function DirectorsStep({
-  directors, onAdd, onUpdate, onDelete, onUploadFile, onViewFile, error, saving, loading,
+  directors, onAdd, onUpdate, onDelete, onUploadFile, onViewFile, onLookupDirector, error, saving, loading,
 }: DirectorsStepProps) {
   const [draft, setDraft] = useState<Omit<Director, 'id'>>(emptyDirectorDraft);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formErrors, setFormErrors] = useState<Partial<Record<keyof Director, string>>>({});
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [openingKey, setOpeningKey] = useState<string | null>(null);
+
+  // Every director must be matched against BRS by ID number before the
+  // rest of the form unlocks. verifiedIdNo tracks which ID that match was
+  // for - if the person edits the ID afterwards, it no longer equals
+  // draft.idNo and the director is treated as unverified again without any
+  // extra bookkeeping.
+  const [verifiedIdNo, setVerifiedIdNo] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState(false);
+  const [lookupError, setLookupError] = useState('');
+  const isVerified = verifiedIdNo !== null && verifiedIdNo === draft.idNo.trim();
 
   // The actual File objects live separately from the draft's filename
   // strings - the filename is what gets shown/saved as text, the File
@@ -37,16 +52,46 @@ export default function DirectorsStep({
   const change = (field: keyof Omit<Director, 'id'>, value: string) => {
     setDraft((prev) => ({ ...prev, [field]: value }));
     if (formErrors[field]) setFormErrors((prev) => ({ ...prev, [field]: undefined }));
+    if (field === 'idNo') setLookupError('');
+  };
+
+  const handleLookup = async () => {
+    const idNo = draft.idNo.trim();
+    if (!idNo) {
+      setFormErrors((prev) => ({ ...prev, idNo: 'Enter an ID number first' }));
+      return;
+    }
+    setVerifying(true);
+    setLookupError('');
+    try {
+      const result = await onLookupDirector(idNo);
+      if (result.found) {
+        setDraft((prev) => ({
+          ...prev,
+          fullNames: result.fullNames,
+          nationality: result.nationality,
+          percentageShare: result.percentageShare,
+        }));
+        setVerifiedIdNo(idNo);
+      } else {
+        setVerifiedIdNo(null);
+        setLookupError('No director with this ID was found in BRS records for this company. Check the ID number, or verify the company in Company Details first.');
+      }
+    } catch (err) {
+      setVerifiedIdNo(null);
+      setLookupError(err instanceof Error ? err.message : 'Could not check this ID against BRS. Please try again.');
+    } finally {
+      setVerifying(false);
+    }
   };
 
   const validateDraft = (): boolean => {
     const next: Partial<Record<keyof Director, string>> = {};
     if (!draft.idNo.trim()) next.idNo = 'Required';
-    if (!draft.fullNames.trim()) next.fullNames = 'Required';
+    else if (!isVerified) next.idNo = 'Look up this ID against BRS before adding this director.';
     if (!draft.highestQualification) next.highestQualification = 'Required';
     if (!draft.profession) next.profession = 'Required';
     if (!draft.yearsOfExperience.trim()) next.yearsOfExperience = 'Required';
-    if (!draft.percentageShare.trim()) next.percentageShare = 'Required';
     if (!editingId && !draft.cvFileName) next.cvFileName = 'CV is required';
     setFormErrors(next);
     return Object.keys(next).length === 0;
@@ -58,6 +103,8 @@ export default function DirectorsStep({
     setFormErrors({});
     setCvFile(null);
     setAcademicCertFile(null);
+    setVerifiedIdNo(null);
+    setLookupError('');
   };
 
   const handleSave = async () => {
@@ -82,6 +129,12 @@ export default function DirectorsStep({
     setFormErrors({});
     setCvFile(null);
     setAcademicCertFile(null);
+    // Already-saved directors were matched against BRS when they were
+    // added (or predate this check) - treat them as verified unless the
+    // person changes the ID number, which will fall out of sync with
+    // isVerified automatically and require a fresh lookup.
+    setVerifiedIdNo(director.idNo);
+    setLookupError('');
   };
 
   const handleDelete = async (id: string) => {
@@ -194,47 +247,87 @@ export default function DirectorsStep({
 
         <div className="grid sm:grid-cols-3 gap-4">
           <Field label="ID No/Passport No" required error={formErrors.idNo}>
-            <input className={inputCls(formErrors.idNo)} value={draft.idNo} onChange={(e) => change('idNo', e.target.value)} />
+            <div className="flex gap-2">
+              <input
+                className={inputCls(formErrors.idNo)}
+                value={draft.idNo}
+                onChange={(e) => change('idNo', e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={handleLookup}
+                disabled={verifying || !draft.idNo.trim()}
+                className="px-3 rounded-md text-white text-xs font-medium shrink-0 disabled:opacity-60"
+                style={{ backgroundColor: 'var(--rcis-primary)' }}
+              >
+                {verifying ? 'Checking...' : 'Load from BRS'}
+              </button>
+            </div>
           </Field>
-          <Field label="Full Names" required error={formErrors.fullNames}>
-            <input className={inputCls(formErrors.fullNames)} value={draft.fullNames} onChange={(e) => change('fullNames', e.target.value)} />
+          <Field label="Full Names">
+            <input className={inputCls()} value={draft.fullNames} disabled placeholder="Filled in from BRS" />
           </Field>
-          <Field label="Nationality" required>
-            <select className={inputCls()} value={draft.nationality} onChange={(e) => change('nationality', e.target.value)}>
-              {NATIONALITIES.map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
+          <Field label="Nationality">
+            <input className={inputCls()} value={draft.nationality} disabled placeholder="Filled in from BRS" />
+          </Field>
+
+          {isVerified && (
+            <div className="sm:col-span-3 flex items-center gap-1.5 text-xs font-medium text-emerald-600 -mt-2">
+              <CheckCircle2 size={13} />
+              Verified with BRS
+            </div>
+          )}
+          {lookupError && (
+            <p className="sm:col-span-3 text-[11px] text-red-600 -mt-2">{lookupError}</p>
+          )}
+
+          <Field label="Percentage Share">
+            <input className={inputCls()} value={draft.percentageShare} disabled placeholder="Filled in from BRS" />
           </Field>
           <Field label="Highest Qualification" required error={formErrors.highestQualification}>
-            <select className={inputCls(formErrors.highestQualification)} value={draft.highestQualification} onChange={(e) => change('highestQualification', e.target.value)}>
+            <select
+              className={inputCls(formErrors.highestQualification)}
+              value={draft.highestQualification}
+              onChange={(e) => change('highestQualification', e.target.value)}
+              disabled={!isVerified}
+            >
               <option value="">Please Select</option>
               {QUALIFICATIONS.map((q) => <option key={q} value={q}>{q}</option>)}
             </select>
           </Field>
           <Field label="Profession" required error={formErrors.profession}>
-            <select className={inputCls(formErrors.profession)} value={draft.profession} onChange={(e) => change('profession', e.target.value)}>
+            <select
+              className={inputCls(formErrors.profession)}
+              value={draft.profession}
+              onChange={(e) => change('profession', e.target.value)}
+              disabled={!isVerified}
+            >
               <option value="">Please Select</option>
               {PROFESSIONS.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
           </Field>
           <Field label="Years of Experience" required error={formErrors.yearsOfExperience}>
-            <input className={inputCls(formErrors.yearsOfExperience)} value={draft.yearsOfExperience} onChange={(e) => change('yearsOfExperience', e.target.value)} inputMode="numeric" />
-          </Field>
-          <Field label="Percentage Share" required error={formErrors.percentageShare}>
-            <input className={inputCls(formErrors.percentageShare)} value={draft.percentageShare} onChange={(e) => change('percentageShare', e.target.value)} inputMode="numeric" placeholder="e.g. 25" />
+            <input
+              className={inputCls(formErrors.yearsOfExperience)}
+              value={draft.yearsOfExperience}
+              onChange={(e) => change('yearsOfExperience', e.target.value)}
+              inputMode="numeric"
+              disabled={!isVerified}
+            />
           </Field>
 
           <Field label="Curriculum Vitae" required error={formErrors.cvFileName}>
-            <label className={`${inputCls(formErrors.cvFileName)} flex items-center gap-2 cursor-pointer text-slate-500`}>
+            <label className={`${inputCls(formErrors.cvFileName)} flex items-center gap-2 ${isVerified ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'} text-slate-500`}>
               <Upload size={14} />
               <span className="truncate">{draft.cvFileName || 'Choose file...'}</span>
-              <input type="file" className="hidden" onChange={(e) => handleFileSelect('cv', e)} />
+              <input type="file" className="hidden" onChange={(e) => handleFileSelect('cv', e)} disabled={!isVerified} />
             </label>
           </Field>
           <Field label="Academic Certificates">
-            <label className={`${inputCls()} flex items-center gap-2 cursor-pointer text-slate-500`}>
+            <label className={`${inputCls()} flex items-center gap-2 ${isVerified ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'} text-slate-500`}>
               <Upload size={14} />
               <span className="truncate">{draft.academicCertFileName || 'Choose file...'}</span>
-              <input type="file" className="hidden" onChange={(e) => handleFileSelect('academicCert', e)} />
+              <input type="file" className="hidden" onChange={(e) => handleFileSelect('academicCert', e)} disabled={!isVerified} />
             </label>
           </Field>
         </div>
@@ -243,7 +336,7 @@ export default function DirectorsStep({
           <button
             type="button"
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || !isVerified}
             className="px-4 py-2 rounded-md text-white text-xs font-medium disabled:opacity-60"
             style={{ backgroundColor: 'var(--rcis-accent)' }}
           >

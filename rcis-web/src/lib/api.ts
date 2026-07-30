@@ -762,6 +762,22 @@ export function verifyCompanyRegistration(registrationNumber: string) {
     method: 'GET',
   }, true);
 }
+
+export type BrsDirectorLookupResponse =
+  | { found: false }
+  | { found: true; fullNames: string; nationality: string; percentageShare: string };
+
+// Matches a director's ID number against the cached BRS data for this
+// application's company (populated the last time it was verified) -
+// used to gate the Directors tab so it only fills in / accepts directors
+// BRS actually lists for that company.
+export function lookupBrsDirector(regno: string, idNo: string) {
+  return request<BrsDirectorLookupResponse>(
+    `/contractor-applications/brs-director?regno=${encodeURIComponent(regno)}&idNo=${encodeURIComponent(idNo)}`,
+    { method: 'GET' },
+    true,
+  );
+}
 export function getSubmission(id: string) {
   return request<ContractorApplicationRecord>(`/contractor-applications/submissions/${id}`, {
     method: 'GET',

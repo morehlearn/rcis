@@ -6,6 +6,7 @@ import LoginPage from '@/pages/LoginPage';
 import ComingSoonPage from '@/pages/ComingSoonPage';
 import RequireAuth from '@/components/RequireAuth';
 import ViewApplicationPage from '@/pages/ViewApplicationPage';
+import SelectCertificateCompanyPage from '@/pages/SelectCertificateCompanyPage';
 
 // Every route except register/login/forgot-password requires being logged
 // in - RequireAuth redirects to /login (preserving the intended path) if
@@ -21,6 +22,7 @@ function App() {
 
         <Route path="/" element={<RequireAuth><DashboardPage /></RequireAuth>} />
         <Route path="/apply" element={<RequireAuth><ApplicationWizardPage /></RequireAuth>} />
+        <Route path="/apply/select-company" element={<RequireAuth><SelectCertificateCompanyPage /></RequireAuth>} />
         <Route path="/applications/:id" element={<RequireAuth><ViewApplicationPage /></RequireAuth>} />
 
         {/* Not built yet - placeholders so every sidebar/card link resolves */}

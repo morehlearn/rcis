@@ -1,32 +1,25 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, useNavigate, Link } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, Save } from 'lucide-react';
 import TopNav from '@/components/TopNav';
 import Sidebar from '@/components/Sidebar';
 import WizardStepper from '@/features/wizard/WizardStepper';
-import FirmProfileStep from '@/features/wizard/steps/FirmProfileStep';
-import FirmRegistrationStep from '@/features/wizard/steps/FirmRegistrationStep';
-import DeclarationsStep from '@/features/wizard/steps/DeclarationsStep';
-import DirectorsStep from '@/features/wizard/steps/DirectorsStep';
-import OfficesStep from '@/features/wizard/steps/OfficesStep';
-import RefereesStep from '@/features/wizard/steps/RefereesStep';
+import CompanyDetailsStep from '@/features/wizard/steps/CompanyDetailsStep';
+import PeopleStep from '@/features/wizard/steps/PeopleStep';
+import ResourcesStep from '@/features/wizard/steps/ResourcesStep';
+import TrackRecordStep from '@/features/wizard/steps/TrackRecordStep';
+import ClassificationAttachmentsStep from '@/features/wizard/steps/ClassificationAttachmentsStep';
 import ApplicationRequirementsModal from '@/features/wizard/ApplicationRequirementsModal';
 import { WIZARD_STEPS, MODE_LABELS, resolveMode, MODE_TO_APPLICATION_TYPE } from '@/features/wizard/wizard-config';
-import AssetsStep from '@/features/wizard/steps/AssetsStep';
-import StaffStep from '@/features/wizard/steps/StaffStep';
-import EquipmentStep from '@/features/wizard/steps/EquipmentStep';
-import ProjectExperienceStep from '@/features/wizard/steps/ProjectExperienceStep';
-import LitigationStep from '@/features/wizard/steps/LitigationStep';
-import AttachmentsStep from '@/features/wizard/steps/AttachmentsStep';
-import ClassificationStep from '@/features/wizard/steps/ClassificationStep';
 import {
   emptyFirmProfile, emptyFirmRegistration, emptyDeclarations,emptyClassification,
   type FirmProfileData, type FirmRegistrationData, type DeclarationsData, type Director, type Office, type Referee, type ClassificationData,
+  type Asset, type Staff, type Equipment, type ProjectExperience, type Litigation,
 } from '@/features/wizard/wizard-types';
 import SummaryStep from '@/features/wizard/steps/SummaryStep';
 
 import {
-  createFirmProfile, updateFirmProfile, updateFirmRegistration, updateDeclarations, listMyApplications,
+  createFirmProfile, updateFirmProfile, updateFirmRegistration, updateDeclarations, listMyApplications, listMySubmissions,
   listDirectors, createDirector, updateDirector, deleteDirector,
   uploadDirectorFile, getDirectorFileUrl, type ContractorDirectorRecord, type DirectorFileField,
   listOffices, createOffice, updateOffice, deleteOffice, type ContractorOfficeRecord,
@@ -37,7 +30,7 @@ import {
  listEquipment, createEquipment, updateEquipment, deleteEquipment, type ContractorEquipmentRecord,
  listProjectExperience, createProjectExperience, updateProjectExperience, deleteProjectExperience, type ContractorProjectExperienceRecord,
  listLitigation, createLitigation, updateLitigation, deleteLitigation, type ContractorLitigationRecord,
- getClassification, upsertClassification, verifyCompanyRegistration, type BrsDirector,
+ getClassification, upsertClassification, verifyCompanyRegistration, lookupBrsDirector,
 submitApplication,} from '@/lib/api';
 
 type FirmProfileErrors = Partial<Record<keyof FirmProfileData, string>>;
@@ -51,11 +44,12 @@ const REQUIRED_FIRM_PROFILE: (keyof FirmProfileData)[] = [
 ];
 
 const REQUIRED_FIRM_REGISTRATION: (keyof FirmRegistrationData)[] = [
-  'firmType', 'incorporationNo', 'kraPin', 'bankName', 'bankBranch', 'associationMembershipNo',
+  'firmType', 'kraPin', 'bankName', 'bankBranch', 'associationMembershipNo',
 ];
 
 export default function ApplicationWizardPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const mode = resolveMode(searchParams.get('mode'));
   const { title, subtitle } = MODE_LABELS[mode];
 
@@ -145,9 +139,19 @@ export default function ApplicationWizardPage() {
   // Every subsequent step's PATCH call needs it, so it lives at wizard level.
   const [regno, setRegno] = useState<string | null>(null);
 
+  // Which sub-tab is active within each grouped step. "Save and continue"
+  // steps through these one at a time so nobody's Referees or Staff tab
+  // gets skipped just because Directors was filled in first.
+  const [peopleTab, setPeopleTab] = useState(0);
+  const [resourcesTab, setResourcesTab] = useState(0);
+  const [trackRecordTab, setTrackRecordTab] = useState(0);
+
   const [verifying, setVerifying] = useState(false);
   const [verifyMessage, setVerifyMessage] = useState<{ type: 'error' | 'warning' | 'info'; text: string } | undefined>();
-  const [pendingBrsDirectors, setPendingBrsDirectors] = useState<BrsDirector[]>([]);
+  // Set when verify-company finds this company already registered under a
+  // "new registration" flow - blocks Save and continue until the
+  // incorporation number is changed to something that isn't a duplicate.
+  const [duplicateRegno, setDuplicateRegno] = useState<string | null>(null);
 
 
   const [savedAt, setSavedAt] = useState<Date | null>(null);
@@ -165,11 +169,27 @@ export default function ApplicationWizardPage() {
     if (!resumeRegno) return;
 
     setResuming(true);
-    listMyApplications()
-      .then(async (applications) => {
+    Promise.all([listMyApplications(), listMySubmissions()])
+      .then(async ([applications, submissions]) => {
         const app = applications.find((a) => a.regno === resumeRegno);
         if (!app) {
           setApiError('That application could not be found.');
+          return;
+        }
+
+        // Once an application has at least one submitted tracking record
+        // it's locked - send the person back to the dashboard instead of
+        // loading it for editing. Mirrors the same "in progress" check the
+        // dashboard uses to decide whether to show a "Continue" prompt.
+        // "Apply for a new certificate/licence" is the one deliberate
+        // exception: it reopens an already-submitted regno on purpose, to
+        // add a new class against the same company.
+        const alreadySubmitted = submissions.some((s) => s.regno === resumeRegno);
+        if (alreadySubmitted && mode !== 'certificate') {
+          navigate('/', {
+            replace: true,
+            state: { notice: 'That application has already been submitted and can no longer be edited.' },
+          });
           return;
         }
 
@@ -191,7 +211,6 @@ export default function ApplicationWizardPage() {
         });
         setFirmRegistration({
           firmType: app.firmType ?? 'Company',
-          incorporationNo: app.incorporationNo ?? '',
           kraPin: app.kraPin ?? '',
           registeredCapital: app.registeredCapital ?? '',
           paidUpCapital: app.paidUpCapital ?? '',
@@ -215,50 +234,65 @@ export default function ApplicationWizardPage() {
           acceptTerms: app.acceptTerms ?? false,
         });
 
-        // Land on the first step that still needs work: Firm Profile always
-        // exists once regno exists, so the earliest possible resume point
-        // is Step 2 (Firm Registration).
-        const declarationsDone = !!app.acceptCodeOfConduct && !!app.acceptTerms;
+        // Land on the first grouped step that still needs work: Firm Profile
+        // always exists once regno exists, so the earliest possible resume
+        // point is Step 1 (People) once Company Details is filled in.
         const registrationDone = !!app.firmType;
-        let resumeStep = declarationsDone ? 3 : registrationDone ? 2 : 1;
+        let resumeStep = registrationDone ? 1 : 0;
 
-        if (declarationsDone) {
-          const [directorRecords, officeRecords, refereeRecords, assetRecords, staffRecords, equipmentRecords, projectRecords, litigationRecords, classificationRecord] = await Promise.all([
-            listDirectors(app.regno).catch(() => []),
-            listOffices(app.regno).catch(() => []),
-            listReferees(app.regno).catch(() => []),
-            listAssets(app.regno).catch(() => []),
-            listStaff(app.regno).catch(() => []),
-            listEquipment(app.regno).catch(() => []),
-            listProjectExperience(app.regno).catch(() => []),
-            listLitigation(app.regno).catch(() => []),
-            getClassification(app.regno).catch(() => null),
-          ]);
-          if (classificationRecord) {
-            setClassification({
-              applicationType: classificationRecord.applicationType,
-              buildingWorksCategory: classificationRecord.buildingWorksCategory,
-              roadWorksCategory: classificationRecord.roadWorksCategory,
-              waterWorksCategory: classificationRecord.waterWorksCategory,
-              electricalSubClasses: classificationRecord.electricalSubClasses,
-              electricalCategory: classificationRecord.electricalCategory,
-              mechanicalSubClasses: classificationRecord.mechanicalSubClasses,
-              mechanicalCategory: classificationRecord.mechanicalCategory,
-            });
-            setClassificationLoadedFor(app.regno);
-          }
-          if (classificationRecord) resumeStep = 12;
-          else if (litigationRecords.length > 0) resumeStep = 10;
-          else if (projectRecords.length > 0) resumeStep = 9;
-          else if (equipmentRecords.length > 0) resumeStep = 8;
-          else if (staffRecords.length > 0) resumeStep = 7;
-          else if (assetRecords.length > 0) resumeStep = 6;
-          else if (refereeRecords.length > 0) resumeStep = 5;
-          else if (officeRecords.length > 0) resumeStep = 4;
-          else if (directorRecords.length > 0) resumeStep = 3;
+        const [directorRecords, officeRecords, refereeRecords, assetRecords, staffRecords, equipmentRecords, projectRecords, litigationRecords, classificationRecord] = await Promise.all([
+          listDirectors(app.regno).catch(() => []),
+          listOffices(app.regno).catch(() => []),
+          listReferees(app.regno).catch(() => []),
+          listAssets(app.regno).catch(() => []),
+          listStaff(app.regno).catch(() => []),
+          listEquipment(app.regno).catch(() => []),
+          listProjectExperience(app.regno).catch(() => []),
+          listLitigation(app.regno).catch(() => []),
+          getClassification(app.regno).catch(() => null),
+        ]);
+        // "Apply for a new certificate/licence" only wants to show the
+        // class being added, not what's already registered - so this mode
+        // deliberately skips prefilling the classification form, even
+        // though a record already exists for this regno. It's still marked
+        // "loaded" so the per-step effect below doesn't try to load it in
+        // and overwrite the blank starting state.
+        if (classificationRecord && mode !== 'certificate') {
+          setClassification({
+            applicationType: classificationRecord.applicationType,
+            buildingWorksCategory: classificationRecord.buildingWorksCategory,
+            roadWorksCategory: classificationRecord.roadWorksCategory,
+            waterWorksCategory: classificationRecord.waterWorksCategory,
+            electricalSubClasses: classificationRecord.electricalSubClasses,
+            electricalCategory: classificationRecord.electricalCategory,
+            mechanicalSubClasses: classificationRecord.mechanicalSubClasses,
+            mechanicalCategory: classificationRecord.mechanicalCategory,
+          });
         }
+        if (classificationRecord) setClassificationLoadedFor(app.regno);
 
-        setVisited(new Set(Array.from({ length: resumeStep + 1 }, (_, i) => i)));
+        if (mode === 'certificate') {
+          // This company is already fully registered - land on Company
+          // Details for a quick confirm, and let every step be clicked
+          // straight away rather than gating on "furthest step reached".
+          resumeStep = 0;
+        } else if (classificationRecord) resumeStep = 4;
+        else if (projectRecords.length > 0 || litigationRecords.length > 0) resumeStep = 3;
+        else if (officeRecords.length > 0 || assetRecords.length > 0 || equipmentRecords.length > 0) resumeStep = 2;
+        else if (directorRecords.length > 0 || refereeRecords.length > 0 || staffRecords.length > 0) resumeStep = 1;
+
+        // Land on the right sub-tab within whichever group is resumed into,
+        // following the same Directors -> Referees -> Staff (etc.) order
+        // that "Save and continue" steps through.
+        setPeopleTab(directorRecords.length > 0 ? (refereeRecords.length > 0 ? 2 : 1) : 0);
+        setResourcesTab(officeRecords.length > 0 ? (assetRecords.length > 0 ? 2 : 1) : 0);
+        setTrackRecordTab(projectRecords.length > 0 ? 1 : 0);
+
+        setVisited(
+          mode === 'certificate'
+            ? new Set(Array.from({ length: WIZARD_STEPS.length }, (_, i) => i))
+            : new Set(Array.from({ length: resumeStep + 1 }, (_, i) => i)),
+        );
         setActiveStep(resumeStep);
       })
       .catch((err) => {
@@ -285,7 +319,7 @@ export default function ApplicationWizardPage() {
   // reached for a given regno - covers both a fresh wizard run and
   // resuming an application that already has directors saved.
   useEffect(() => {
-    if (activeStep !== 3 || !regno || directorsLoadedFor === regno) return;
+    if (activeStep !== 1 || !regno || directorsLoadedFor === regno) return;
 
     setDirectorsLoading(true);
     listDirectors(regno)
@@ -300,26 +334,10 @@ export default function ApplicationWizardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeStep, regno]);
 
-  useEffect(() => {
-    if (!regno || pendingBrsDirectors.length === 0) return;
-    Promise.all(pendingBrsDirectors.map((d) => createDirector({
-      regno,
-      idNo: d.idNo,
-      fullNames: d.fullNames,
-      nationality: d.nationality,
-      highestQualification: '',
-      profession: '',
-      yearsOfExperience: '',
-      percentageShare: d.percentageShare,
-    })))
-      .then((created) => {
-        setDirectors((prev) => [...prev, ...created.map(toDirector)]);
-        setPendingBrsDirectors([]);
-      })
-      .catch(() => {
-        // Leave pendingBrsDirectors as-is; directors can still be added manually at Step 4.
-      });
-  }, [regno, pendingBrsDirectors]);
+  // Directors are no longer auto-created from the BRS verify response -
+  // every director, including ones BRS already lists, gets added through
+  // the ID lookup + "Load from BRS" flow in the Directors tab so the list
+  // stays strictly tied to verified BRS data.
 
   const toOffice = (record: ContractorOfficeRecord): Office => ({
     id: record.id,
@@ -329,12 +347,13 @@ export default function ApplicationWizardPage() {
   });
 
   // Same idea as Directors: load offices and the shared document pool the
-  // first time Step 5 is reached for a given regno.
+  // first time the Resources step is reached for a given regno. The shared
+  // document pool is used from Resources onward (Resources, Track record,
+  // Classification & documents), so it loads on any of those steps too.
   useEffect(() => {
-  if ((activeStep !== 4 && activeStep !== 5 && activeStep !== 6 && activeStep !== 7 && activeStep !== 8 && activeStep !== 9 && activeStep !== 10 && activeStep !== 11 && activeStep !== 12) || !regno) return;
-    return;
+    if ((activeStep !== 1 && activeStep !== 2 && activeStep !== 3 && activeStep !== 4) || !regno) return;
 
-    if (activeStep === 4 && officesLoadedFor !== regno) {
+    if (activeStep === 2 && officesLoadedFor !== regno) {
       setOfficesLoading(true);
       listOffices(regno)
         .then((records) => {
@@ -370,9 +389,9 @@ export default function ApplicationWizardPage() {
     profession: record.profession,
   });
 
-  // Load existing referees the first time Step 6 is reached for a given regno.
+  // Load existing referees the first time the People step is reached for a given regno.
   useEffect(() => {
-    if (activeStep !== 5 || !regno || refereesLoadedFor === regno) return;
+    if (activeStep !== 1 || !regno || refereesLoadedFor === regno) return;
 
     setRefereesLoading(true);
     listReferees(regno)
@@ -395,7 +414,7 @@ export default function ApplicationWizardPage() {
   });
 
   useEffect(() => {
-    if (activeStep !== 6 || !regno || assetsLoadedFor === regno) return;
+    if (activeStep !== 2 || !regno || assetsLoadedFor === regno) return;
 
     setAssetsLoading(true);
     listAssets(regno)
@@ -420,7 +439,7 @@ export default function ApplicationWizardPage() {
   });
 
   useEffect(() => {
-    if (activeStep !== 7 || !regno || staffLoadedFor === regno) return;
+    if (activeStep !== 1 || !regno || staffLoadedFor === regno) return;
 
     setStaffLoading(true);
     listStaff(regno)
@@ -445,7 +464,7 @@ export default function ApplicationWizardPage() {
   });
 
   useEffect(() => {
-    if (activeStep !== 8 || !regno || equipmentLoadedFor === regno) return;
+    if (activeStep !== 2 || !regno || equipmentLoadedFor === regno) return;
 
     setEquipmentLoading(true);
     listEquipment(regno)
@@ -469,7 +488,7 @@ export default function ApplicationWizardPage() {
   });
 
   useEffect(() => {
-    if (activeStep !== 9 || !regno || projectsLoadedFor === regno) return;
+    if (activeStep !== 3 || !regno || projectsLoadedFor === regno) return;
 
     setProjectsLoading(true);
     listProjectExperience(regno)
@@ -494,7 +513,7 @@ export default function ApplicationWizardPage() {
   });
 
   useEffect(() => {
-    if (activeStep !== 10 || !regno || litigationLoadedFor === regno) return;
+    if (activeStep !== 3 || !regno || litigationLoadedFor === regno) return;
 
     setLitigationLoading(true);
     listLitigation(regno)
@@ -511,11 +530,14 @@ export default function ApplicationWizardPage() {
 
 
 useEffect(() => {
-    if (activeStep !== 12 || !regno || classificationLoadedFor === regno) return;
+    if (activeStep !== 4 || !regno || classificationLoadedFor === regno) return;
 
     getClassification(regno)
       .then((record) => {
-        if (record) {
+        // Certificate/licence applications only show the class being
+        // newly added, never what's already registered - so the form
+        // stays blank here even if a classification record already exists.
+        if (record && mode !== 'certificate') {
           setClassification({
             applicationType: record.applicationType,
             buildingWorksCategory: record.buildingWorksCategory,
@@ -541,7 +563,7 @@ useEffect(() => {
   // whatever wasn't already loaded this session, so Summary is never
   // showing stale "None added" for data that actually exists.
   useEffect(() => {
-    if (activeStep !== 13 || !regno) return;
+    if (activeStep !== 5 || !regno) return;
 
     if (directorsLoadedFor !== regno) {
       listDirectors(regno).then((records) => {
@@ -599,7 +621,7 @@ useEffect(() => {
     }
     if (classificationLoadedFor !== regno) {
       getClassification(regno).then((record) => {
-        if (record) {
+        if (record && mode !== 'certificate') {
           setClassification({
             applicationType: record.applicationType,
             buildingWorksCategory: record.buildingWorksCategory,
@@ -621,12 +643,17 @@ useEffect(() => {
   const handleProfileChange = (field: keyof FirmProfileData, value: string) => {
     setFirmProfile((prev) => ({ ...prev, [field]: value }));
     if (profileErrors[field]) setProfileErrors((prev) => ({ ...prev, [field]: undefined }));
+    if (field === 'incorporationNo' && duplicateRegno) {
+      setDuplicateRegno(null);
+      setVerifyMessage(undefined);
+    }
   };
 
   const handleVerifyCompany = async () => {
     if (!firmProfile.incorporationNo.trim()) return;
     setVerifying(true);
     setVerifyMessage(undefined);
+    setDuplicateRegno(null);
     try {
       const result = await verifyCompanyRegistration(firmProfile.incorporationNo);
 
@@ -645,15 +672,30 @@ useEffect(() => {
         });
         return;
       }
+
+      // New Contractor Registration is only meant for companies that
+      // aren't in the system yet - if BRS/our own records show this
+      // incorporation number already has a regno, block it here instead
+      // of letting a second, duplicate registration be created for the
+      // same company. Renewal/Upgrade/Downgrade modes are exempt since
+      // finding the existing company is the whole point there.
+      if (result.existingRegno && mode === 'new') {
+        setDuplicateRegno(result.existingRegno);
+        setVerifyMessage({
+          type: 'error',
+          text: `Company exists in the system with regno ${result.existingRegno}. Please continue with the existing details.`,
+        });
+        return;
+      }
+
       if (result.existingRegno) {
-        setVerifyMessage({ type: 'info', text: `This company is already registered (${result.existingRegno}). Continuing will let you start a new application for it using your existing details.` });
+        setVerifyMessage({ type: 'info', text: `This company is already registered (${result.existingRegno}).` });
       } else {
-        setVerifyMessage({ type: 'info', text: `Verified: ${result.businessName}. Firm details have been pre-filled from BRS.` });
+        setVerifyMessage({ type: 'info', text: `Verified: ${result.businessName}` });
       }
 
       setFirmProfile((prev) => ({ ...prev, firmName: result.businessName }));
       setFirmRegistration((prev) => ({ ...prev, kraPin: result.kraPin }));
-      setPendingBrsDirectors(result.directors);
     } catch (err) {
       setVerifyMessage({ type: 'error', text: err instanceof Error ? err.message : 'Could not verify this company. Please try again.' });
     } finally {
@@ -712,6 +754,13 @@ useEffect(() => {
     } catch (err) {
       setDirectorsError(err instanceof Error ? err.message : 'Could not open this file.');
     }
+  };
+
+  const handleLookupDirector = async (idNo: string) => {
+    if (!regno) {
+      return { found: false as const };
+    }
+    return lookupBrsDirector(regno, idNo);
   };
 
   const handleUpdateDirector = async (id: string, director: Omit<Director, 'id'>): Promise<boolean> => {
@@ -1150,6 +1199,15 @@ useEffect(() => {
     return true;
   };
 
+  const validateReferees = (): boolean => {
+    if (referees.length === 0) {
+      setRefereesError('Add at least one referee before continuing');
+      return false;
+    }
+    setRefereesError('');
+    return true;
+  };
+
   const validateClassification = (): boolean => {
     const next: Partial<Record<keyof ClassificationData, string>> = {};
     if (!classification.applicationType) next.applicationType = 'Required';
@@ -1158,6 +1216,7 @@ useEffect(() => {
   };
 
   const handleSubmit = async () => {
+    if (!validateDeclarations()) return;
     if (!regno) {
       setSubmitError('Missing application reference — please go back to Step 1 and save again.');
       return;
@@ -1165,8 +1224,16 @@ useEffect(() => {
     setSubmitting(true);
     setSubmitError('');
     try {
+      await updateDeclarations({ regno, ...declarations });
       const updated = await submitApplication(regno);
       setJustSubmittedTrackNo(updated.trackNo);
+      // Submitted applications are locked - there's nothing left to do on
+      // this page, so send the person back to the dashboard rather than
+      // leaving them sitting on a wizard they can no longer edit.
+      navigate('/', {
+        replace: true,
+        state: { notice: `Application submitted. Your tracking number is ${updated.trackNo}.` },
+      });
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Could not submit the application. Please try again.');
     } finally {
@@ -1191,70 +1258,81 @@ useEffect(() => {
   const handleNext = async () => {
     setApiError('');
 
-    // Steps 0-2 persist directly on "Save and continue". Steps 3 (Directors)
-    // and 4 (Offices) persist incrementally as each row/document is added,
-    // so "Save and continue" there just validates and moves on - the actual
-    // saving already happened via their own add/edit/delete handlers.
+    // Step 0 (Company Details) persists both Firm Profile and Firm
+    // Registration on "Save and continue". People/Resources/Track record
+    // persist incrementally as each row/document is added within their
+    // tabs, so "Save and continue" there just validates and moves on.
     if (activeStep === 0) {
-  if (!validateProfile()) return;
-  setSaving(true);
-  try {
-    if (regno) {
-      // Already has a regno (fresh create earlier, or resumed) - update, don't create again.
-      await updateFirmProfile({ regno, ...firmProfile });
-    } else {
-      const created = await createFirmProfile({ ...firmProfile });
-      setRegno(created.regno);
-      
-    }
-    advance();
-  } catch (err) {
-    setApiError(err instanceof Error ? err.message : 'Could not save Firm Profile. Please try again.');
-  } finally {
-    setSaving(false);
-  }
-  return;
-}
-
-    if (activeStep === 1) {
-      if (!validateRegistration()) return;
-      if (!regno) {
-        setApiError('Missing application reference — please go back to Step 1 and save again.');
+      if (duplicateRegno) {
+        setApiError(`Company exists in the system with regno ${duplicateRegno}. Please continue with the existing details.`);
         return;
       }
+      if (!validateProfile() || !validateRegistration()) return;
       setSaving(true);
       try {
-        await updateFirmRegistration({ regno, ...firmRegistration });
+        if (regno) {
+          // Already has a regno (fresh create earlier, or resumed) - update, don't create again.
+          await Promise.all([
+            updateFirmProfile({ regno, ...firmProfile }),
+            updateFirmRegistration({ regno, ...firmRegistration }),
+          ]);
+        } else {
+          const created = await createFirmProfile({ ...firmProfile });
+          setRegno(created.regno);
+          await updateFirmRegistration({ regno: created.regno, ...firmRegistration });
+        }
         advance();
       } catch (err) {
-        setApiError(err instanceof Error ? err.message : 'Could not save Firm Registration. Please try again.');
+        setApiError(err instanceof Error ? err.message : 'Could not save Company Details. Please try again.');
       } finally {
         setSaving(false);
       }
+      return;
+    }
+
+    // People, Resources and Track record each bundle 2-3 tabs. "Save and
+    // continue" steps through them one at a time - Directors then Referees
+    // then Staff, and so on - instead of jumping straight to the next
+    // wizard step the moment the first tab is filled in. Directors and
+    // Referees are mandatory; the rest just need to be seen, not filled.
+    if (activeStep === 1) {
+      if (peopleTab === 0) {
+        if (!validateDirectors()) return;
+        setSavedAt(new Date());
+        setPeopleTab(1);
+        return;
+      }
+      if (peopleTab === 1) {
+        if (!validateReferees()) return;
+        setSavedAt(new Date());
+        setPeopleTab(2);
+        return;
+      }
+      advance();
       return;
     }
 
     if (activeStep === 2) {
-      if (!validateDeclarations()) return;
-      if (!regno) {
-        setApiError('Missing application reference — please go back to Step 1 and save again.');
+      if (resourcesTab < 2) {
+        setSavedAt(new Date());
+        setResourcesTab(resourcesTab + 1);
         return;
       }
-      setSaving(true);
-      try {
-        await updateDeclarations({ regno, ...declarations });
-        advance();
-      } catch (err) {
-        setApiError(err instanceof Error ? err.message : 'Could not save Declarations. Please try again.');
-      } finally {
-        setSaving(false);
-      }
+      advance();
       return;
     }
 
-  if (activeStep === 3 && !validateDirectors()) return;
+    if (activeStep === 3) {
+      if (trackRecordTab < 1) {
+        setSavedAt(new Date());
+        setTrackRecordTab(trackRecordTab + 1);
+        return;
+      }
+      advance();
+      return;
+    }
 
-    if (activeStep === 12) {
+    if (activeStep === 4) {
       if (!validateClassification()) return;
       if (!regno) {
         setApiError('Missing application reference — please go back to Step 1 and save again.');
@@ -1276,7 +1354,28 @@ useEffect(() => {
   };
 
   const handlePrev = () => {
-    if (activeStep > 0) goStep(activeStep - 1);
+    // Mirror the forward tab-stepping: back up one tab within the current
+    // group before leaving it, and land on the last tab of the previous
+    // group when stepping back into one.
+    if (activeStep === 1 && peopleTab > 0) {
+      setPeopleTab(peopleTab - 1);
+      return;
+    }
+    if (activeStep === 2 && resourcesTab > 0) {
+      setResourcesTab(resourcesTab - 1);
+      return;
+    }
+    if (activeStep === 3 && trackRecordTab > 0) {
+      setTrackRecordTab(trackRecordTab - 1);
+      return;
+    }
+
+    if (activeStep === 0) return;
+    const prevStep = activeStep - 1;
+    if (prevStep === 1) setPeopleTab(2);
+    if (prevStep === 2) setResourcesTab(2);
+    if (prevStep === 3) setTrackRecordTab(1);
+    goStep(prevStep);
   };
 
   const savedLabel = useMemo(() => {
@@ -1286,59 +1385,137 @@ useEffect(() => {
 
   const renderStep = () => {
     if (activeStep === 0) {
-      return <FirmProfileStep
-            data={firmProfile}
-            errors={profileErrors}
-            onChange={handleProfileChange}
-            onVerify={handleVerifyCompany}
-            verifying={verifying}
-            verifyMessage={verifyMessage}
-          />;
-    }
-    if (activeStep === 1) {
       return (
-        <FirmRegistrationStep
-          data={firmRegistration}
-          errors={registrationErrors}
-          onChange={handleRegistrationChange}
+        <CompanyDetailsStep
+          profileData={firmProfile}
+          profileErrors={profileErrors}
+          onProfileChange={handleProfileChange}
+          onVerify={handleVerifyCompany}
+          verifying={verifying}
+          verifyMessage={verifyMessage}
+          registrationData={firmRegistration}
+          registrationErrors={registrationErrors}
+          onRegistrationChange={handleRegistrationChange}
           onCategoriesChange={handleCategoriesChange}
         />
       );
     }
+
+    if (activeStep === 1) {
+      return (
+        <PeopleStep
+          activeTab={peopleTab}
+          onActiveTabChange={setPeopleTab}
+          directors={directors}
+          onAddDirector={handleAddDirector}
+          onUpdateDirector={handleUpdateDirector}
+          onDeleteDirector={handleDeleteDirector}
+          onUploadDirectorFile={handleUploadDirectorFile}
+          onViewDirectorFile={handleViewDirectorFile}
+          onLookupDirector={handleLookupDirector}
+          directorsError={directorsError}
+          directorsSaving={directorsSaving}
+          directorsLoading={directorsLoading}
+          referees={referees}
+          onAddReferee={handleAddReferee}
+          onUpdateReferee={handleUpdateReferee}
+          onDeleteReferee={handleDeleteReferee}
+          refereesError={refereesError}
+          refereesSaving={refereesSaving}
+          refereesLoading={refereesLoading}
+          staff={staff}
+          onAddStaff={handleAddStaff}
+          onUpdateStaff={handleUpdateStaff}
+          onDeleteStaff={handleDeleteStaff}
+          staffError={staffError}
+          staffSaving={staffSaving}
+          staffLoading={staffLoading}
+          documents={documents}
+          documentsLoading={documentsLoading}
+          documentsUploading={documentsUploading}
+          documentsError={documentsError}
+          onUploadDocument={handleUploadDocument}
+          onViewDocument={handleViewDocument}
+          onDeleteDocument={handleDeleteDocument}
+        />
+      );
+    }
+
     if (activeStep === 2) {
       return (
-        <DeclarationsStep
-          data={declarations}
-          errors={declarationsErrors}
-          onChange={handleDeclarationsChange}
+        <ResourcesStep
+          activeTab={resourcesTab}
+          onActiveTabChange={setResourcesTab}
+          offices={offices}
+          onAddOffice={handleAddOffice}
+          onUpdateOffice={handleUpdateOffice}
+          onDeleteOffice={handleDeleteOffice}
+          officesError={officesError}
+          officesSaving={officesSaving}
+          officesLoading={officesLoading}
+          assets={assets}
+          onAddAsset={handleAddAsset}
+          onUpdateAsset={handleUpdateAsset}
+          onDeleteAsset={handleDeleteAsset}
+          assetsError={assetsError}
+          assetsSaving={assetsSaving}
+          assetsLoading={assetsLoading}
+          equipment={equipment}
+          onAddEquipment={handleAddEquipment}
+          onUpdateEquipment={handleUpdateEquipment}
+          onDeleteEquipment={handleDeleteEquipment}
+          equipmentError={equipmentError}
+          equipmentSaving={equipmentSaving}
+          equipmentLoading={equipmentLoading}
+          documents={documents}
+          documentsLoading={documentsLoading}
+          documentsUploading={documentsUploading}
+          documentsError={documentsError}
+          onUploadDocument={handleUploadDocument}
+          onViewDocument={handleViewDocument}
+          onDeleteDocument={handleDeleteDocument}
         />
       );
     }
+
     if (activeStep === 3) {
       return (
-        <DirectorsStep
-          directors={directors}
-          onAdd={handleAddDirector}
-          onUpdate={handleUpdateDirector}
-          onDelete={handleDeleteDirector}
-          onUploadFile={handleUploadDirectorFile}
-          onViewFile={handleViewDirectorFile}
-          error={directorsError}
-          saving={directorsSaving}
-          loading={directorsLoading}
+        <TrackRecordStep
+          activeTab={trackRecordTab}
+          onActiveTabChange={setTrackRecordTab}
+          projects={projects}
+          onAddProject={handleAddProject}
+          onUpdateProject={handleUpdateProject}
+          onDeleteProject={handleDeleteProject}
+          projectsError={projectsError}
+          projectsSaving={projectsSaving}
+          projectsLoading={projectsLoading}
+          litigation={litigation}
+          onAddLitigation={handleAddLitigation}
+          onUpdateLitigation={handleUpdateLitigation}
+          onDeleteLitigation={handleDeleteLitigation}
+          litigationError={litigationError}
+          litigationSaving={litigationSaving}
+          litigationLoading={litigationLoading}
+          documents={documents}
+          documentsLoading={documentsLoading}
+          documentsUploading={documentsUploading}
+          documentsError={documentsError}
+          onUploadDocument={handleUploadDocument}
+          onViewDocument={handleViewDocument}
+          onDeleteDocument={handleDeleteDocument}
         />
       );
     }
+
     if (activeStep === 4) {
       return (
-        <OfficesStep
-          offices={offices}
-          onAdd={handleAddOffice}
-          onUpdate={handleUpdateOffice}
-          onDelete={handleDeleteOffice}
-          error={officesError}
-          saving={officesSaving}
-          loading={officesLoading}
+        <ClassificationAttachmentsStep
+          classification={classification}
+          classificationErrors={classificationErrors}
+          onClassificationChange={handleClassificationChange}
+          onElectricalSubClassesChange={handleElectricalSubClassesChange}
+          onMechanicalSubClassesChange={handleMechanicalSubClassesChange}
           documents={documents}
           documentsLoading={documentsLoading}
           documentsUploading={documentsUploading}
@@ -1352,167 +1529,15 @@ useEffect(() => {
 
     if (activeStep === 5) {
       return (
-        <RefereesStep
-          referees={referees}
-          onAdd={handleAddReferee}
-          onUpdate={handleUpdateReferee}
-          onDelete={handleDeleteReferee}
-          error={refereesError}
-          saving={refereesSaving}
-          loading={refereesLoading}
-          documents={documents}
-          documentsLoading={documentsLoading}
-          documentsUploading={documentsUploading}
-          documentsError={documentsError}
-          onUploadDocument={handleUploadDocument}
-          onViewDocument={handleViewDocument}
-          onDeleteDocument={handleDeleteDocument}
-        />
-      );
-    }
-
-    if (activeStep === 6) {
-      return (
-        <AssetsStep
-          assets={assets}
-          onAdd={handleAddAsset}
-          onUpdate={handleUpdateAsset}
-          onDelete={handleDeleteAsset}
-          error={assetsError}
-          saving={assetsSaving}
-          loading={assetsLoading}
-          documents={documents}
-          documentsLoading={documentsLoading}
-          documentsUploading={documentsUploading}
-          documentsError={documentsError}
-          onUploadDocument={handleUploadDocument}
-          onViewDocument={handleViewDocument}
-          onDeleteDocument={handleDeleteDocument}
-        />
-      );
-    }
-
-    if (activeStep === 7) {
-      return (
-        <StaffStep
-          staff={staff}
-          onAdd={handleAddStaff}
-          onUpdate={handleUpdateStaff}
-          onDelete={handleDeleteStaff}
-          error={staffError}
-          saving={staffSaving}
-          loading={staffLoading}
-          documents={documents}
-          documentsLoading={documentsLoading}
-          documentsUploading={documentsUploading}
-          documentsError={documentsError}
-          onUploadDocument={handleUploadDocument}
-          onViewDocument={handleViewDocument}
-          onDeleteDocument={handleDeleteDocument}
-        />
-      );
-    }
-
-    if (activeStep === 8) {
-      return (
-        <EquipmentStep
-          equipment={equipment}
-          onAdd={handleAddEquipment}
-          onUpdate={handleUpdateEquipment}
-          onDelete={handleDeleteEquipment}
-          error={equipmentError}
-          saving={equipmentSaving}
-          loading={equipmentLoading}
-          documents={documents}
-          documentsLoading={documentsLoading}
-          documentsUploading={documentsUploading}
-          documentsError={documentsError}
-          onUploadDocument={handleUploadDocument}
-          onViewDocument={handleViewDocument}
-          onDeleteDocument={handleDeleteDocument}
-        />
-      );
-    }
-
-    if (activeStep === 9) {
-      return (
-        <ProjectExperienceStep
-          projects={projects}
-          onAdd={handleAddProject}
-          onUpdate={handleUpdateProject}
-          onDelete={handleDeleteProject}
-          error={projectsError}
-          saving={projectsSaving}
-          loading={projectsLoading}
-          documents={documents}
-          documentsLoading={documentsLoading}
-          documentsUploading={documentsUploading}
-          documentsError={documentsError}
-          onUploadDocument={handleUploadDocument}
-          onViewDocument={handleViewDocument}
-          onDeleteDocument={handleDeleteDocument}
-        />
-      );
-    }
-
-    if (activeStep === 10) {
-      return (
-        <LitigationStep
-          litigation={litigation}
-          onAdd={handleAddLitigation}
-          onUpdate={handleUpdateLitigation}
-          onDelete={handleDeleteLitigation}
-          error={litigationError}
-          saving={litigationSaving}
-          loading={litigationLoading}
-          documents={documents}
-          documentsLoading={documentsLoading}
-          documentsUploading={documentsUploading}
-          documentsError={documentsError}
-          onUploadDocument={handleUploadDocument}
-          onViewDocument={handleViewDocument}
-          onDeleteDocument={handleDeleteDocument}
-        />
-      );
-    }
-
-    if (activeStep === 11) {
-      return (
-        <AttachmentsStep
-          documents={documents}
-          documentsLoading={documentsLoading}
-          documentsUploading={documentsUploading}
-          documentsError={documentsError}
-          onUploadDocument={handleUploadDocument}
-          onViewDocument={handleViewDocument}
-          onDeleteDocument={handleDeleteDocument}
-        />
-      );
-    }
-
-
-    if (activeStep === 12) {
-      return (
-        <ClassificationStep
-          data={classification}
-          errors={classificationErrors}
-          onChange={handleClassificationChange}
-          onElectricalSubClassesChange={handleElectricalSubClassesChange}
-          onMechanicalSubClassesChange={handleMechanicalSubClassesChange}
-          onUploadDocument={handleUploadDocument}
-          documentsUploading={documentsUploading}
-        />
-      );
-    }
-
-    if (activeStep === 13) {
-      return (
         <SummaryStep
           regno={regno}
           justSubmittedTrackNo={justSubmittedTrackNo}
           firmProfile={firmProfile}
           firmRegistration={firmRegistration}
           declarations={declarations}
+          declarationsErrors={declarationsErrors}
+          onDeclarationsChange={handleDeclarationsChange}
+          validateDeclarations={validateDeclarations}
           directors={directors}
           offices={offices}
           referees={referees}

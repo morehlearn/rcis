@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Field, inputCls } from '../Field';
 import { COUNTIES, TOWNS, type FirmProfileData } from '../wizard-types';
 
@@ -11,6 +12,34 @@ interface FirmProfileStepProps {
 }
 
 export default function FirmProfileStep({ data, errors, onChange, onVerify, verifying, verifyMessage }: FirmProfileStepProps) {
+  const [locating, setLocating] = useState(false);
+  const [locateError, setLocateError] = useState('');
+
+  const handleSetLocation = () => {
+    if (!navigator.geolocation) {
+      setLocateError('Geolocation is not supported by this browser.');
+      return;
+    }
+    setLocating(true);
+    setLocateError('');
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        onChange('latitude', position.coords.latitude.toFixed(6));
+        onChange('longitude', position.coords.longitude.toFixed(6));
+        setLocating(false);
+      },
+      (err) => {
+        setLocateError(
+          err.code === err.PERMISSION_DENIED
+            ? 'Location access was denied. Please allow location access and try again.'
+            : 'Could not get your current location. Please try again or enter it manually.',
+        );
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  };
+
   return (
     <div className="space-y-5">
       <div>
@@ -149,10 +178,12 @@ export default function FirmProfileStep({ data, errors, onChange, onVerify, veri
         <Field label="Set Location">
           <button
             type="button"
-            className="px-3 py-2 rounded-md text-white text-xs font-medium"
+            onClick={handleSetLocation}
+            disabled={locating}
+            className="px-3 py-2 rounded-md text-white text-xs font-medium disabled:opacity-60"
             style={{ backgroundColor: 'var(--rcis-primary)' }}
           >
-            📍 Set Location
+            📍 {locating ? 'Locating...' : 'Set Location'}
           </button>
         </Field>
         <Field label="Latitude" error={errors.latitude}>
@@ -170,6 +201,9 @@ export default function FirmProfileStep({ data, errors, onChange, onVerify, veri
           />
         </Field>
       </div>
+      {locateError && (
+        <p className="text-[11px] text-red-600">{locateError}</p>
+      )}
     </div>
   );
 }

@@ -1,21 +1,13 @@
 export const WIZARD_STEPS = [
-  'Firm profile',
-  'Firm registration',
-  'Declarations',
-  'Directors',
-  'Offices',
-  'Referees',
-  'Fixed assets',
-  'Staff',
-  'Equipment & plant',
-  'Project experience',
-  'Litigation history',
-  'Attachments',
-  'Classification',
+  'Company details',
+  'People',
+  'Resources',
+  'Track record',
+  'Classification & documents',
   'Review & submit',
 ] as const;
 
-export type WizardMode = 'new' | 'renewal' | 'upgrade' | 'downgrade';
+export type WizardMode = 'new' | 'renewal' | 'upgrade' | 'downgrade' | 'certificate';
 
 export const MODE_LABELS: Record<WizardMode, { title: string; subtitle: string }> = {
   new: {
@@ -34,6 +26,10 @@ export const MODE_LABELS: Record<WizardMode, { title: string; subtitle: string }
     title: 'Certificate downgrade',
     subtitle: 'Apply to move down a registration category',
   },
+  certificate: {
+    title: 'Apply for a new certificate/licence',
+    subtitle: 'Add a class or licence to an existing registration',
+  },
 };
 
 export const MODE_TO_APPLICATION_TYPE: Record<WizardMode, string> = {
@@ -41,9 +37,10 @@ export const MODE_TO_APPLICATION_TYPE: Record<WizardMode, string> = {
   renewal: 'Renewal',
   upgrade: 'Upgrade',
   downgrade: 'Downgrade',
+  certificate: 'Additional Certificate',
 };
 
 export function resolveMode(param: string | null): WizardMode {
-  if (param === 'renewal' || param === 'upgrade' || param === 'downgrade') return param;
+  if (param === 'renewal' || param === 'upgrade' || param === 'downgrade' || param === 'certificate') return param;
   return 'new';
 }

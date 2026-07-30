@@ -9,14 +9,15 @@ interface WizardStepperProps {
 
 export default function WizardStepper({ steps, activeStep, visited, onStepClick }: WizardStepperProps) {
   return (
-    <ol className="flex flex-wrap items-center gap-x-1.5 gap-y-2">
+    <ol className="flex flex-wrap items-center gap-x-1 gap-y-2">
       {steps.map((step, i) => {
         const isActive = i === activeStep;
         const isDone = i < activeStep;
         const isClickable = visited.has(i);
+        const isLast = i === steps.length - 1;
 
         return (
-          <li key={step}>
+          <li key={step} className="flex items-center">
             <button
               disabled={!isClickable}
               onClick={() => onStepClick(i)}
@@ -35,8 +36,9 @@ export default function WizardStepper({ steps, activeStep, visited, onStepClick 
               >
                 {isDone ? <Check size={13} /> : i + 1}
               </span>
-              {isActive && <span className="text-slate-800">{step}</span>}
+              <span className={isActive ? 'text-slate-800' : 'text-slate-500'}>{step}</span>
             </button>
+            {!isLast && <span className="mx-1 h-px w-4 bg-slate-200 hidden sm:block" />}
           </li>
         );
       })}

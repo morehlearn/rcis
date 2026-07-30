@@ -22,7 +22,7 @@ import { UpdateProjectExperienceDto } from './dto/update-project-experience.dto'
 import { CreateLitigationDto } from './dto/create-litigation.dto';
 import { UpdateLitigationDto } from './dto/update-litigation.dto';
 import { UpsertClassificationDto } from './dto/upsert-classification.dto';
-import { BrsService } from '../brs/brs.service';
+import { BrsService, type BrsVerificationResult } from '../brs/brs.service';
 
 
 @Injectable()
@@ -47,6 +47,8 @@ export class ContractorApplicationsService {
     return { found: true as const, blocked: true as const };
   }
 
+  await this.cacheBrsResult(registrationNumber, brsResult);
+
   const requiresForeignRegistration = brsResult.foreignShareholdingPercent >= 51;
 
   return {
@@ -55,6 +57,79 @@ export class ContractorApplicationsService {
     requiresForeignRegistration,
     ...brsResult,
     existingRegno: existing?.regno ?? null,
+  };
+}
+
+// Writes through to the BRS cache on every successful verify, so director
+// details can be matched by ID number later (Directors tab, via
+// lookupBrsDirector) without querying BRS again - and so that data
+// survives across sessions if the contractor resumes the draft later.
+private async cacheBrsResult(registrationNumber: string, result: BrsVerificationResult) {
+  const companyRecord = await this.prisma.client.brsCompanyRecord.upsert({
+    where: { registrationNumber },
+    create: {
+      registrationNumber,
+      businessName: result.businessName,
+      kraPin: result.kraPin,
+      registrationDate: result.registrationDate,
+      foreignShareholdingPercent: result.foreignShareholdingPercent,
+    },
+    update: {
+      businessName: result.businessName,
+      kraPin: result.kraPin,
+      registrationDate: result.registrationDate,
+      foreignShareholdingPercent: result.foreignShareholdingPercent,
+    },
+  });
+
+  await Promise.all(
+    result.directors.map((director) =>
+      this.prisma.client.brsDirectorRecord.upsert({
+        where: {
+          companyRecordId_idNo: { companyRecordId: companyRecord.id, idNo: director.idNo },
+        },
+        create: {
+          companyRecordId: companyRecord.id,
+          idNo: director.idNo,
+          fullNames: director.fullNames,
+          nationality: director.nationality,
+          percentageShare: director.percentageShare,
+        },
+        update: {
+          fullNames: director.fullNames,
+          nationality: director.nationality,
+          percentageShare: director.percentageShare,
+        },
+      }),
+    ),
+  );
+}
+
+// Matches a director's ID number against the cached BRS data for the
+// company behind this application - used to gate the Directors tab so
+// only BRS-verified directors can be added.
+async lookupBrsDirector(userId: string, regno: string, idNo: string) {
+  const company = await this.getOwned(regno, userId);
+
+  const companyRecord = await this.prisma.client.brsCompanyRecord.findUnique({
+    where: { registrationNumber: company.incorporationNo },
+  });
+  if (!companyRecord) {
+    return { found: false as const };
+  }
+
+  const director = await this.prisma.client.brsDirectorRecord.findUnique({
+    where: { companyRecordId_idNo: { companyRecordId: companyRecord.id, idNo } },
+  });
+  if (!director) {
+    return { found: false as const };
+  }
+
+  return {
+    found: true as const,
+    fullNames: director.fullNames,
+    nationality: director.nationality,
+    percentageShare: director.percentageShare,
   };
 }
 
@@ -473,10 +548,40 @@ async getClassification(userId: string, regno: string) {
 async upsertClassification(userId: string, dto: UpsertClassificationDto) {
   const { regno, ...rest } = dto;
   await this.getOwned(regno, userId);
-  return this.prisma.client.contractorClassification.upsert({
+
+  const existing = await this.prisma.client.contractorClassification.findUnique({ where: { regno } });
+  if (!existing) {
+    return this.prisma.client.contractorClassification.create({ data: { regno, ...rest } });
+  }
+
+  // A classification already exists for this regno - this only happens
+  // when applying for an additional certificate/licence against an
+  // already-registered company, since every other application type always
+  // starts from a brand new regno. That flow's form intentionally shows a
+  // blank slate (only the class being newly added), so a plain overwrite
+  // here would silently erase whatever categories/subclasses the company
+  // already holds. Merge instead: union the subclass lists, and keep the
+  // existing category values rather than letting the blank form's
+  // defaults clobber them.
+  const electricalSubClasses = Array.from(
+    new Set([...existing.electricalSubClasses, ...rest.electricalSubClasses]),
+  );
+  const mechanicalSubClasses = Array.from(
+    new Set([...existing.mechanicalSubClasses, ...rest.mechanicalSubClasses]),
+  );
+
+  return this.prisma.client.contractorClassification.update({
     where: { regno },
-    create: { regno, ...rest },
-    update: rest,
+    data: {
+      applicationType: rest.applicationType,
+      buildingWorksCategory: existing.buildingWorksCategory,
+      roadWorksCategory: existing.roadWorksCategory,
+      waterWorksCategory: existing.waterWorksCategory,
+      electricalCategory: existing.electricalCategory,
+      mechanicalCategory: existing.mechanicalCategory,
+      electricalSubClasses,
+      mechanicalSubClasses,
+    },
   });
 }
 

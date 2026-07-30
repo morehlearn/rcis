@@ -45,7 +45,7 @@ export const SERVICE_CARDS = [
     to: '/apply?mode=new',
     panelLinks: [
       { label: 'New Contractor Registration', to: '/apply?mode=new', icon: 'plus', accent: 'primary' },
-      { label: 'Apply for a new Contractor Certificate/Licence', to: '/apply?mode=new&type=certificate', icon: 'file', accent: 'accent' },
+      { label: 'Apply for a new Contractor Certificate/Licence', to: '/apply/select-company', icon: 'file', accent: 'accent' },
       { label: 'My Licence(s)', to: '/licences', icon: 'licence', accent: 'accent' },
       { label: 'My Certificate(s)', to: '/certificates', icon: 'certificate', accent: 'accent' },
     ] as PanelLink[],
